@@ -17,6 +17,8 @@ from typing import List, Optional, Tuple, Union
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 import llm_reconstruction_free
 import os
+from datasets import load_dataset_builder, get_dataset_split_names, load_dataset
+
 
 os.environ['WANDB_DISABLED']="true"
 llm_reconstruction_free.activate()
@@ -53,9 +55,21 @@ tokenizer.pad_token = tokenizer.eos_token
 
 model.gradient_checkpointing_enable()
 
+
+print(get_dataset_split_names("rotten_tomatoes"))
+train_dataset = load_dataset("rotten_tomatoes", split="train")
+train_dataset = train_dataset.rename_column("label", "labels")
+train_dataset = train_dataset.map(lambda examples: tokenizer(examples['text'], truncation=True, padding='max_length'), batched=True)
+train_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask', 'labels'])
+train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=32)
+#eval_dataset = load_dataset("rotten_tomatoes", split="validation")
+#eval_dataset = tokenizer(eval_dataset["text"], padding=True)
+
+model.enable_input_require_grads()
 peft_model = get_peft_model(model, config)
 
 
+ds_builder = load_dataset_builder("rotten_tomatoes")
 
 peft_training_args = TrainingArguments(
     output_dir = "./",
@@ -69,9 +83,9 @@ peft_training_args = TrainingArguments(
     logging_dir="./logs",
     save_strategy="steps",
     save_steps=25,
-    evaluation_strategy="steps",
-    eval_steps=25,
-    do_eval=True,
+#    evaluation_strategy="steps",
+#    eval_steps=25,
+#    do_eval=True,
     gradient_checkpointing=True,
     report_to="none",
     overwrite_output_dir = 'True',
@@ -83,7 +97,7 @@ peft_model.config.use_cache = False
 peft_trainer = transformers.Trainer(
     model=peft_model,
     train_dataset=train_dataset,
-    eval_dataset=eval_dataset,
+#    eval_dataset=eval_dataset,
     args=peft_training_args,
     data_collator=transformers.DataCollatorForLanguageModeling(tokenizer, mlm=False),
 )

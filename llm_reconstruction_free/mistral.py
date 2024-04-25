@@ -56,8 +56,9 @@ def forward(
         shift_labels = shift_labels.view(-1)
         # Ensure tensors are on the same device
         shift_labels = shift_labels.to(shift_logits.device)
-        loss_fct = CrossEntropyLoss()
+        loss_fct = torch.nn.CrossEntropyLoss()
         loss = loss_fct(shift_logits, shift_labels)
+        print("My custom loss value", loss.item())
 
     if not return_dict:
         output = (logits,) + outputs[1:]
