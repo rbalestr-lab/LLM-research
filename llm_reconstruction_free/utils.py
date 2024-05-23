@@ -10,20 +10,30 @@ from transformers.modeling_outputs import (
     BaseModelOutputWithPast, CausalLMOutput
 )
 import wandb
-
+import numpy as np
 
 class LLMClassifier(nn.Module):
-    def __init__(self, in_features, out_features):
+    def __init__(self, in_features, n_layers, vocab_size, out_features, split):
         super().__init__()
-        self.linear = nn.Linear(in_features, out_features)
 
-    def forward(self, x):
-        return self.linear(x.mean(1))
+        self.lm_head = nn.Linear(in_features, vocab_size)
+
+        self.remaining = max(1, int(n_layers * (1-split)))
+
+        self.cl_head = torch.nn.Sequential(
+#                nn.BatchNorm1d(in_features*2*self.remaining),
+                nn.Linear(in_features*2*self.remaining, out_features)
+                )
+
+    def forward(self, *xs):
+        vocab_hat = self.lm_head(xs[self.remaining-1])
+        cl_hat = self.cl_head(torch.concat(sum([[x.mean(1),x[:,-1]] for x in xs[-self.remaining:]], []),1))
+        return vocab_hat, cl_hat
 
 
 class CustomConfig(transformers.PretrainedConfig):
     model_type = 'custombackbonehead'
-    def __init__(self, backbone_config=None, backbone_name=None, backbone_pretrained=None, task=None, in_features=None, out_features=None, **kwargs):
+    def __init__(self, backbone_config=None, backbone_name=None, backbone_pretrained=None, task=None, in_features=None, out_features=None, split=None, **kwargs):
         self.backbone_config = backbone_config
         self.backbone_pretrained = backbone_pretrained
         self.backbone_name = backbone_name
@@ -31,7 +41,15 @@ class CustomConfig(transformers.PretrainedConfig):
         self.task = task
         self.in_features = in_features
         self.out_features = out_features
+        self.split = split
         super().__init__(**kwargs)
+
+def dataset_to_max_length(name):
+    if "rotten" in name:
+        return 256
+    elif "imdb" in name:
+        return 1024
+
 
 def name_to_lora(name):
     if "apple" in name:
@@ -47,6 +65,17 @@ class CustomBackboneHead(transformers.PreTrainedModel):
     config_class = CustomConfig
     def __init__(self, config):
         super().__init__(config)
+
+        if config.task == "lm":
+            self.head = nn.Linear(config.in_features, 1, config.out_features, bias=False)
+        else:
+            self.config.tie_word_embeddings = False
+            if "apple" in config.backbone_name:
+                n_layers = config.backbone_config.num_transformer_layers + 1
+            else:
+                raise NotImplementedError("NOT IMPLEMENTEDEF OR NOT APPLE")
+            self.head = LLMClassifier(config.in_features, n_layers, config.backbone_config.vocab_size, config.out_features, config.split)
+
         if "apple" in config.backbone_name and not config.backbone_pretrained:
             model = modeling_openelm.OpenELMModel(config.backbone_config)
         elif type(config.backbone_pretrained) == bool and config.backbone_pretrained:
@@ -65,10 +94,7 @@ class CustomBackboneHead(transformers.PreTrainedModel):
 
         self.backbone = model
 
-        if config.task == "lm":
-            self.head = nn.Linear(config.in_features, config.out_features, bias=False)
-        else:
-            self.head = LLMClassifier(config.in_features, config.out_features)
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.backbone.get_input_embeddings()
@@ -77,7 +103,7 @@ class CustomBackboneHead(transformers.PreTrainedModel):
         self.backbone.set_input_embeddings(value)
 
     def get_output_embeddings(self):
-        return self.lm_head
+        return self.head
 
     def set_output_embeddings(self, new_embeddings):
         self.head = new_embeddings
@@ -100,7 +126,6 @@ class CustomBackboneHead(transformers.PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        ft_labels=None,
     ) -> Union[Tuple, CausalLMOutput]:
     
     
@@ -119,6 +144,19 @@ class CustomBackboneHead(transformers.PreTrainedModel):
         )
     
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+
+        # apply some mixup
+#        if self.config.task == "ft" and self.training:
+#            inputs_embeds = self.backbone.token_embeddings(input_ids)
+#            lam = np.random.beta(1, 1)
+#            batch_size = input_ids.size(0)
+#            index = torch.randperm(batch_size, device=input_ids.device)
+#            inputs_embeds = lam * inputs_embeds + (1 - lam) * inputs_embeds[index]
+#            y_a, y_b = labels, labels[index]
+#            attention_mask = torch.maximum(attention_mask, attention_mask[index])
+#            input_ids = None
+
+
         outputs = self.backbone(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -127,35 +165,39 @@ class CustomBackboneHead(transformers.PreTrainedModel):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            output_hidden_states=True,
             return_dict=return_dict,
         )
         hidden_states = outputs[0]
     
-        logits = self.head(hidden_states)
-        logits = logits.float()
     
         loss = None
         if self.config.task == "lm":
+            logits = self.head(outputs[0])
+            logits = logits.float()
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             # Flatten the tokens
             shift_logits = shift_logits.view(-1, self.config.out_features)
             loss = torch.nn.functional.cross_entropy(shift_logits, input_ids[:,1:].flatten())
         else:
-#            wandb.log({"acc":(logits.detach().argmax(-1)==ft_labels).float().mean().item()})
-            loss = torch.nn.functional.cross_entropy(logits, ft_labels.flatten())
+            criterion = torch.nn.functional.cross_entropy
+            vocabs, logits = self.head(*outputs[2])
+            print(vocabs.shape)
+            shift_logits = vocabs[..., :-1, :].contiguous()
+            shift_logits = shift_logits.view(-1, self.config.backbone_config.vocab_size)
+            print(input_ids.shape, shift_logits.shape, logits.shape)
+            loss = criterion(shift_logits, input_ids[:,1:].flatten()) + criterion(logits, labels.flatten(), label_smoothing=0.1)
     
         return CausalLMOutput(
             loss=loss,
             logits=logits,
-#            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            hidden_states=None,#outputs.hidden_states,
+            attentions=None,#outputs.attentions,
         )
 
 
-def get_model(name, size="original", pretrained=True, task="lm", num_classes=None):
+def get_model(name, size="original", pretrained=True, task="lm", num_classes=None, split=0.5):
     if name not in MODELS:
         raise ValueError(f"`{name}` must be in {MODELS}")
     if pretrained and size != "original":
@@ -184,7 +226,7 @@ def get_model(name, size="original", pretrained=True, task="lm", num_classes=Non
     elif "arctic" in name:
         in_features = backbone_config.hidden_size
 
-    config = CustomConfig(backbone_config=backbone_config, backbone_name=name, backbone_pretrained=pretrained, task=task, in_features=in_features, out_features=out_features)
+    config = CustomConfig(backbone_config=backbone_config, backbone_name=name, backbone_pretrained=pretrained, task=task, in_features=in_features, out_features=out_features, split=split)
     model = CustomBackboneHead(config)
     return model
 

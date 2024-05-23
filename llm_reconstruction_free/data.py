@@ -32,10 +32,17 @@ def get_pretraining_dataset():
 def get_rotten():
     train_dataset = load_dataset("rotten_tomatoes", split="train")
     test_dataset = load_dataset("rotten_tomatoes", split="test")
-    train_dataset = train_dataset.rename_column("label", "ft_labels")
-    #    test_dataset = test_dataset.rename_column("label", "labels")
+    train_dataset = train_dataset.rename_column("label", "labels")
+    test_dataset = test_dataset.rename_column("label", "labels")
     return train_dataset, test_dataset
 
+
+def get_snli():
+    train_dataset = load_dataset("snli", split="train")
+    test_dataset = load_dataset("snli", split="test")
+    train_dataset = train_dataset.rename_column("label", "labels")
+    test_dataset = test_dataset.rename_column("label", "labels")
+    return train_dataset, test_dataset
 
 def get_imdb():
     train_dataset = load_dataset("imdb", split="train")
