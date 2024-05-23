@@ -134,3 +134,35 @@ def train_BPE(training_corpus, vocab_size):
     return wrap(tokenizer)
     #tokenizer.save("tokenizer.json")
     #new_tokenizer = Tokenizer.from_file("tokenizer.json")
+
+
+
+def from_model(name):
+    if "apple" in name:
+        print("For apple model we override to the llama-2 one")
+        name = "meta-llama/Llama-2-7b-hf"
+    tokenizer = transformers.AutoTokenizer.from_pretrained(
+        name,
+        trust_remote_code=True,
+        padding_side="left",
+        add_eos_token=True,
+        add_bos_token=True,
+        use_fast=True,
+    )
+    tokenizer.pad_token = tokenizer.eos_token
+    return tokenizer
+
+def from_dataset(dataset, variant:str, vocab_size:int):
+    assert variant in ["wordpiece", "identity", "BPE"]
+    assert "text" in dataset.column_names
+
+    def dataset_iterator():
+        for i in range(0, len(dataset), 1000):
+            yield dataset[i : i + 1000]["text"]
+
+    if variant == "wordpiece":
+        return train_wordpiece(dataset_iterator(), vocab_size=vocab_size)
+    elif variant == "identity":
+        return train_identity(dataset_iterator(), vocab_size=vocab_size)
+    else:
+        return train_BPE(dataset_iterator(), vocab_size=vocab_size)
