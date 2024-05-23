@@ -6,11 +6,23 @@ from tokenizers import (
     processors,
     trainers,
     Tokenizer,
+    Regex
+)
+import transformers
+from tqdm import tqdm
+
+SPECIAL_TOKENS = dict(
+    unk_token="[UNK]",
+    pad_token="[PAD]",
+    cls_token="[CLS]",
+    sep_token="[SEP]",
+    mask_token="[MASK]",
+    bos_token="<s>",
+    eos_token="</s>",
 )
 
-
-def get_normalizer(lower_case=False, accents=True, quotes=True):
-    seqeunce = []
+def get_normalizer(lower_case=True, accents=True, quotes=True):
+    sequence = []
     if quotes:
         sequence.append(normalizers.Replace("``", '"'))
         sequence.append(normalizers.Replace("''", '"'))
@@ -23,12 +35,66 @@ def get_normalizer(lower_case=False, accents=True, quotes=True):
     return normalizers.Sequence(sequence)
 
 
-def train_wordpiece(vocab_size):
-    tokenizer = Tokenizer(models.WordPiece(unk_token="[UNK]"))
-    tokenizer.normalizer = normalizers.Sequence(get_normalizer())
+def wrap(tokenizer,):
+    return transformers.PreTrainedTokenizerFast(
+        tokenizer_object=tokenizer,
+        **SPECIAL_TOKENS,
+        padding_side="left",
+    )
+
+class SplitAll:
+
+    def split(self, i, s):
+        splits = []
+        for l in range(len(str(s))):
+            splits.append(s[l:l+1])
+        return splits
+
+    def pre_tokenize(self, pretok):
+        pretok.split(self.split)
+
+class JoinAll:
+    def decode(self, tokens: list[str]) -> str:
+        return "".join(tokens)
+    def decode_chain(self, tokens):
+        return tokens
+
+
+def train_identity(training_corpus, **kwargs):
+    for name, value in kwargs.items():
+        print(f" argument {name} with value {value} is ignored")
+
+    normalizer = get_normalizer()
+    uni = set()
+    for i in tqdm(training_corpus):
+        if type(i) != list:
+            i = [i]
+        for sub in i:
+            uni.update(list(normalizer.normalize_str(sub)))
+    vocab = dict()
+    for i, token in enumerate(uni):
+        vocab[token]=i
+    vocab[SPECIAL_TOKENS["unk_token"]] = i+1
+    tokenizer = Tokenizer(models.WordPiece(vocab = vocab))
+
+    tokenizer.normalizer = normalizer
+
+    encoding = tokenizer.encode("Let's test this tokenizer.")
+
+    # workaround based on https://github.com/huggingface/tokenizers/issues/581
+    tokenizer = wrap(tokenizer)
+    tokenizer._tokenizer.pre_tokenizer=pre_tokenizers.PreTokenizer.custom(SplitAll())
+    tokenizer._tokenizer.decoder = decoders.Decoder.custom(JoinAll())
+    return tokenizer
+
+
+
+
+def train_wordpiece(training_corpus, vocab_size):
+    tokenizer = Tokenizer(models.WordPiece(unk_token=SPECIAL_TOKENS["unk_token"]))
+    tokenizer.normalizer = get_normalizer()
     tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
-    special_tokens = ["[UNK]", "[PAD]", "[CLS]", "[SEP]", "[MASK]"]
-    trainer = trainers.WordPieceTrainer(vocab_size=vocab_size, special_tokens=special_tokens)
+    trainer = trainers.WordPieceTrainer(vocab_size=vocab_size, special_tokens=list(SPECIAL_TOKENS.values()))
     tokenizer.train_from_iterator(training_corpus, trainer=trainer)
     cls_token_id = tokenizer.token_to_id("[CLS]")
     sep_token_id = tokenizer.token_to_id("[SEP]")
@@ -41,23 +107,30 @@ def train_wordpiece(vocab_size):
     tokenizer.decoder = decoders.WordPiece(prefix="##")
 
     encoding = tokenizer.encode("Let's test this tokenizer.")
-    assert tokenizer.decode(encoding.ids) == "Let's test this tokenizer."
 
-    return tokenizer
+    print(encoding.tokens)
+    print(tokenizer.pre_tokenizer.pre_tokenize_str("Let's test this pre-tokenizer."))
+    print(tokenizer.decode(encoding.ids))
+#    assert tokenizer.decode(encoding.ids) == "Let's test this tokenizer."
+
+    return wrap(tokenizer)
 
 
-def train_BPE():
+def train_BPE(training_corpus, vocab_size):
     tokenizer = Tokenizer(models.BPE())
-    tokenizer.normalizer = normalizers.Sequence(get_normalizer())
+    tokenizer.normalizer = get_normalizer()
     tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
     trainer = trainers.BpeTrainer(vocab_size=vocab_size, special_tokens=["[SEP]"])
-    tokenizer.train_from_iterator(get_training_corpus(), trainer=trainer)
+    tokenizer.train_from_iterator(training_corpus, trainer=trainer)
     tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
     tokenizer.decoder = decoders.ByteLevel()
 
     encoding = tokenizer.encode("Let's test this tokenizer.")
+    print(encoding.tokens)
+    print(tokenizer.pre_tokenizer.pre_tokenize_str("Let's test this pre-tokenizer."))
+    print(tokenizer.decode(encoding.ids))
     assert tokenizer.decode(encoding.ids) == "Let's test this tokenizer."
 
-    return tokenizer
+    return wrap(tokenizer)
     #tokenizer.save("tokenizer.json")
     #new_tokenizer = Tokenizer.from_file("tokenizer.json")

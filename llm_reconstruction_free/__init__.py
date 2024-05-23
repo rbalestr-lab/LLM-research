@@ -21,6 +21,7 @@ from . import data
 from . import openelm
 from .OpenELM_450M import modeling_openelm
 from . import utils
+from . import tokenizer
 import transformers
 
 

@@ -36,6 +36,8 @@ def get_rotten():
     test_dataset = test_dataset.rename_column("label", "labels")
     return train_dataset, test_dataset
 
+def get_wikitext():
+    dataset = load_dataset("wikitext", name="wikitext-2-raw-v1", split="train")
 
 def get_snli():
     train_dataset = load_dataset("snli", split="train")
