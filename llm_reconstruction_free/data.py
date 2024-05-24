@@ -8,7 +8,6 @@ from datasets import (
 
 NAMES = [
     "civil_comments",
-    "imdb",
     "rotten_tomatoes",
     "sst2",
     "yelp_review_full",

@@ -49,8 +49,8 @@ if __name__ == "__main__":
     parser.add_argument("--per-device-batch-size", type=int, default=8)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--pretrained", action="store_true")
-    parser.add_argument("--weight-decay", type=float, default=1e-3)
-    parser.add_argument("--learning-rate", type=float, default=1e-5)
+    parser.add_argument("--weight-decay", type=float, default=1e-5)
+    parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument("--dropout", type=float, default=0)
     parser.add_argument("--mixup", type=float, default=0)
     parser.add_argument("--vocab-size", type=int, default=None)
@@ -61,12 +61,6 @@ if __name__ == "__main__":
     if not args.pretrained:
         assert args.vocab_size is not None
 
-    if int(os.environ["LOCAL_RANK"]) == 0:
-        wandb.init(
-            project="supervised_finetuning",
-            config=args,
-            group=f"dataset={args.dataset}-backbone={args.backbone}",
-        )
 
     data = llm_reconstruction_free.data.from_name(args.dataset)
     train_dataset, test_dataset = data["train"], data["test"]
@@ -146,11 +140,10 @@ if __name__ == "__main__":
         per_device_eval_batch_size=args.per_device_batch_size,
         gradient_accumulation_steps=args.batch_size // (8 * args.per_device_batch_size),
         max_steps=args.training_steps,
-        max_grad_norm=0.01,
+        max_grad_norm=1,
         logging_steps=5,
         logging_dir=f"~/supervised_finetuning/{args.dataset}/{args.backbone}/logs",
-#        save_strategy="steps",
-        save_steps=100,
+#        save_steps=100,
         eval_accumulation_steps=1,
         eval_strategy="steps",
         eval_steps=20,
@@ -159,6 +152,7 @@ if __name__ == "__main__":
         report_to="wandb",
         overwrite_output_dir="True",
         save_strategy="no",
+        load_best_model_at_end=False,
         fp16=True
     )
 
@@ -193,6 +187,15 @@ if __name__ == "__main__":
     print(f"\t-learnable parameters: {learnable}")
     print(f"\t-trainable parameters (HF): {trainer.get_num_trainable_parameters()}")
 
+    args.total_parameters = total
+    args.training_parameters = learnable
+
+    if int(os.environ["LOCAL_RANK"]) == 0:
+        wandb.init(
+            project="supervised_finetuning",
+            config=args,
+            group=f"dataset={args.dataset}-backbone={args.backbone}",
+        )
     trainer.train()
 #
 #    metrics = trainer.evaluate(test_dataset)
