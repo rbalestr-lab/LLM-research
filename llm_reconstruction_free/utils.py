@@ -12,28 +12,20 @@ from transformers.modeling_outputs import (
 import wandb
 import numpy as np
 
-class LLMClassifier(nn.Module):
-    def __init__(self, in_features, n_layers, vocab_size, out_features, split):
+class ClassifierHead(nn.Module):
+    def __init__(self, in_features, n_layers, vocab_size, out_features, dropout):
         super().__init__()
-
-        self.lm_head = nn.Linear(in_features, vocab_size)
-
-        self.remaining = max(1, int(n_layers * (1-split)))
-
-        self.cl_head = torch.nn.Sequential(
-#                nn.BatchNorm1d(in_features*2*self.remaining),
-                nn.Linear(in_features*2*self.remaining, out_features)
-                )
-
-    def forward(self, *xs):
-        vocab_hat = self.lm_head(xs[self.remaining-1])
-        cl_hat = self.cl_head(torch.concat(sum([[x.mean(1),x[:,-1]] for x in xs[-self.remaining:]], []),1))
-        return vocab_hat, cl_hat
+        if dropout:
+            self.classifier = torch.nn.Sequential(nn.Dropout(dropout), nn.Linear(in_features * 2, out_features))
+        else:
+            self.classifier = nn.Linear(in_features * 2, out_features)
+    def forward(self, x):
+        return self.classifier(torch.concat([x.mean(1),x[:,-1]],1)
 
 
 class CustomConfig(transformers.PretrainedConfig):
     model_type = 'custombackbonehead'
-    def __init__(self, backbone_config=None, backbone_name=None, backbone_pretrained=None, task=None, in_features=None, out_features=None, split=None, **kwargs):
+    def __init__(self, backbone_config=None, backbone_name=None, backbone_pretrained=None, task=None, in_features=None, out_features=None, mixup=0, dropout=0, label_smoothing=0, **kwargs):
         self.backbone_config = backbone_config
         self.backbone_pretrained = backbone_pretrained
         self.backbone_name = backbone_name
@@ -41,7 +33,9 @@ class CustomConfig(transformers.PretrainedConfig):
         self.task = task
         self.in_features = in_features
         self.out_features = out_features
-        self.split = split
+        self.dropout = dropout
+        self.mixup = mixup
+        self.label_smoothing = label_smoothing
         super().__init__(**kwargs)
 
 def dataset_to_max_length(name):
@@ -74,7 +68,7 @@ class CustomBackboneHead(transformers.PreTrainedModel):
                 n_layers = config.backbone_config.num_transformer_layers + 1
             else:
                 raise NotImplementedError("NOT IMPLEMENTEDEF OR NOT APPLE")
-            self.head = LLMClassifier(config.in_features, n_layers, config.backbone_config.vocab_size, config.out_features, config.split)
+            self.head = ClassifierHead(config.in_features, n_layers, config.backbone_config.vocab_size, config.out_features, config.dropout)
 
         if "apple" in config.backbone_name and not config.backbone_pretrained:
             model = modeling_openelm.OpenELMModel(config.backbone_config)
@@ -146,16 +140,15 @@ class CustomBackboneHead(transformers.PreTrainedModel):
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
 
         # apply some mixup
-#        if self.config.task == "ft" and self.training:
-#            inputs_embeds = self.backbone.token_embeddings(input_ids)
-#            lam = np.random.beta(1, 1)
-#            batch_size = input_ids.size(0)
-#            index = torch.randperm(batch_size, device=input_ids.device)
-#            inputs_embeds = lam * inputs_embeds + (1 - lam) * inputs_embeds[index]
-#            y_a, y_b = labels, labels[index]
-#            attention_mask = torch.maximum(attention_mask, attention_mask[index])
-#            input_ids = None
-
+        if self.config.task == "ft" and self.training and self.config.mixup:
+            inputs_embeds = self.backbone.token_embeddings(input_ids)
+            lam = np.random.beta(self.config.mixup, self.config.mixup)
+            batch_size = input_ids.size(0)
+            index = torch.randperm(batch_size, device=input_ids.device)
+            inputs_embeds = lam * inputs_embeds + (1 - lam) * inputs_embeds[index]
+            y_a, y_b = labels, labels[index]
+            attention_mask = torch.maximum(attention_mask, attention_mask[index])
+            input_ids = None
 
         outputs = self.backbone(
             input_ids=input_ids,
@@ -170,7 +163,6 @@ class CustomBackboneHead(transformers.PreTrainedModel):
         )
         hidden_states = outputs[0]
     
-    
         loss = None
         if self.config.task == "lm":
             logits = self.head(outputs[0])
@@ -182,13 +174,14 @@ class CustomBackboneHead(transformers.PreTrainedModel):
             loss = torch.nn.functional.cross_entropy(shift_logits, input_ids[:,1:].flatten())
         else:
             criterion = torch.nn.functional.cross_entropy
-            vocabs, logits = self.head(*outputs[2])
-            print(vocabs.shape)
-            shift_logits = vocabs[..., :-1, :].contiguous()
-            shift_logits = shift_logits.view(-1, self.config.backbone_config.vocab_size)
-            print(input_ids.shape, shift_logits.shape, logits.shape)
-            loss = criterion(shift_logits, input_ids[:,1:].flatten()) + criterion(logits, labels.flatten(), label_smoothing=0.1)
-    
+            logits = self.head(hidden_states)
+#            shift_logits = vocabs[..., :-1, :].contiguous()
+#            shift_logits = shift_logits.view(-1, self.config.backbone_config.vocab_size)
+            if args.mixup:
+                loss = criterion(logits, y_a.flatten(), label_smoothing=self.config.label_smoothing) * lam + (1 - lam) * criterion(logits, y_b.flatten(), label_smoothing=self.config.label_smoothing)
+            else:
+                loss = criterion(logits, y_a.flatten(), label_smoothing=self.config.label_smoothing)
+
         return CausalLMOutput(
             loss=loss,
             logits=logits,
@@ -197,7 +190,7 @@ class CustomBackboneHead(transformers.PreTrainedModel):
         )
 
 
-def get_model(name, size="original", pretrained=True, task="lm", num_classes=None, split=0.5):
+def get_model(name, size="original", pretrained=True, task="lm", num_classes=None, mixup=0):
     if name not in MODELS:
         raise ValueError(f"`{name}` must be in {MODELS}")
     if pretrained and size != "original":
@@ -226,41 +219,8 @@ def get_model(name, size="original", pretrained=True, task="lm", num_classes=Non
     elif "arctic" in name:
         in_features = backbone_config.hidden_size
 
-    config = CustomConfig(backbone_config=backbone_config, backbone_name=name, backbone_pretrained=pretrained, task=task, in_features=in_features, out_features=out_features, split=split)
+    config = CustomConfig(backbone_config=backbone_config, backbone_name=name, backbone_pretrained=pretrained, task=task, in_features=in_features, out_features=out_features, mixup=mixup)
     model = CustomBackboneHead(config)
     return model
 
 
-def get_tokenizer(name, pretrained, dataset=None):
-
-    if pretrained:
-        tk_name = "meta-llama/Llama-2-7b-hf" if "apple" in name else name
-        tokenizer = transformers.AutoTokenizer.from_pretrained(
-            tk_name if type(pretrained) == bool else pretrained,
-            trust_remote_code=True,
-            padding_side="left",
-            add_eos_token=True,
-            add_bos_token=True,
-            use_fast=False,
-        )
-        tokenizer.pad_token = tokenizer.eos_token
-    else:
-        assert dataset is not None
-
-        from tokenizers.trainers import BpeTrainer
-        tokenizer = Tokenizer(BPE())
-        # tokenizer = Tokenizer(models.WordPiece(unk_token="[UNK]"))
-
-        # optional
-        #tokenizer.normalizer = normalizers.Sequence(
-        #    [normalizers.NFD(), normalizers.Lowercase(), normalizers.StripAccents()]
-        #)
-
-        
-        from tokenizers.pre_tokenizers import Whitespace
-        tokenizer.pre_tokenizer = Whitespace()
-        
-        trainer = BpeTrainer(special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"])
-        # trainer = trainers.WordPieceTrainer(vocab_size=25000, special_tokens=special_tokens)
-        tokenizer.train_from_iterator(train_dataset, trainer=trainer)
-    return tokenizer
