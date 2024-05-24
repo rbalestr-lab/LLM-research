@@ -12,7 +12,9 @@ if __name__ == "__main__":
 
     config = transformers.AutoConfig.from_pretrained(args.name)
     if args.pretrained:
-        model = transformers.AutoModel.from_pretrained(Path("test_checkpoint"))#config=config)
+        model = transformers.AutoModel.from_pretrained(
+            Path("test_checkpoint")
+        )  # config=config)
     elif args.peft is not None:
         model.load_adapter(peft_model_id)
     else:

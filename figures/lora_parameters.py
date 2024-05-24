@@ -30,7 +30,10 @@ from numerize import numerize
 if __name__ == "__main__":
     df = pd.DataFrame(
         index=["original"] + [f"LoRA(rank={r})" for r in [2, 4, 8, 16]],
-        columns=[a.split("/")[1].replace("snowflake-", "").replace("_","\_") for a in llm_reconstruction_free.MODELS],
+        columns=[
+            a.split("/")[1].replace("snowflake-", "").replace("_", "\_")
+            for a in llm_reconstruction_free.MODELS
+        ],
     )
 
     for j, name in enumerate(llm_reconstruction_free.MODELS):
@@ -76,6 +79,8 @@ if __name__ == "__main__":
                 model=peft_model,
                 args=peft_training_args,
             )
-            df.iloc[i, j] = numerize.numerize(peft_trainer.get_num_trainable_parameters())
-            print(df.iloc[:,:5].to_latex())
-            print(df.iloc[:,5:].to_latex())
+            df.iloc[i, j] = numerize.numerize(
+                peft_trainer.get_num_trainable_parameters()
+            )
+            print(df.iloc[:, :5].to_latex())
+            print(df.iloc[:, 5:].to_latex())

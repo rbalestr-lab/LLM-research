@@ -6,7 +6,7 @@ from tokenizers import (
     processors,
     trainers,
     Tokenizer,
-    Regex
+    Regex,
 )
 import transformers
 from tqdm import tqdm
@@ -20,6 +20,7 @@ SPECIAL_TOKENS = dict(
     bos_token="<s>",
     eos_token="</s>",
 )
+
 
 def get_normalizer(lower_case=True, accents=True, quotes=True):
     sequence = []
@@ -35,27 +36,32 @@ def get_normalizer(lower_case=True, accents=True, quotes=True):
     return normalizers.Sequence(sequence)
 
 
-def wrap(tokenizer,):
+def wrap(
+    tokenizer,
+):
     return transformers.PreTrainedTokenizerFast(
         tokenizer_object=tokenizer,
         **SPECIAL_TOKENS,
         padding_side="left",
     )
 
+
 class SplitAll:
 
     def split(self, i, s):
         splits = []
         for l in range(len(str(s))):
-            splits.append(s[l:l+1])
+            splits.append(s[l : l + 1])
         return splits
 
     def pre_tokenize(self, pretok):
         pretok.split(self.split)
 
+
 class JoinAll:
     def decode(self, tokens: list[str]) -> str:
         return "".join(tokens)
+
     def decode_chain(self, tokens):
         return tokens
 
@@ -73,9 +79,9 @@ def train_identity(training_corpus, **kwargs):
             uni.update(list(normalizer.normalize_str(sub)))
     vocab = dict()
     for i, token in enumerate(uni):
-        vocab[token]=i
-    vocab[SPECIAL_TOKENS["unk_token"]] = i+1
-    tokenizer = Tokenizer(models.WordPiece(vocab = vocab))
+        vocab[token] = i
+    vocab[SPECIAL_TOKENS["unk_token"]] = i + 1
+    tokenizer = Tokenizer(models.WordPiece(vocab=vocab))
 
     tokenizer.normalizer = normalizer
 
@@ -83,18 +89,18 @@ def train_identity(training_corpus, **kwargs):
 
     # workaround based on https://github.com/huggingface/tokenizers/issues/581
     tokenizer = wrap(tokenizer)
-    tokenizer._tokenizer.pre_tokenizer=pre_tokenizers.PreTokenizer.custom(SplitAll())
+    tokenizer._tokenizer.pre_tokenizer = pre_tokenizers.PreTokenizer.custom(SplitAll())
     tokenizer._tokenizer.decoder = decoders.Decoder.custom(JoinAll())
     return tokenizer
-
-
 
 
 def train_wordpiece(training_corpus, vocab_size):
     tokenizer = Tokenizer(models.WordPiece(unk_token=SPECIAL_TOKENS["unk_token"]))
     tokenizer.normalizer = get_normalizer()
     tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
-    trainer = trainers.WordPieceTrainer(vocab_size=vocab_size, special_tokens=list(SPECIAL_TOKENS.values()))
+    trainer = trainers.WordPieceTrainer(
+        vocab_size=vocab_size, special_tokens=list(SPECIAL_TOKENS.values())
+    )
     tokenizer.train_from_iterator(training_corpus, trainer=trainer)
     cls_token_id = tokenizer.token_to_id("[CLS]")
     sep_token_id = tokenizer.token_to_id("[SEP]")
@@ -111,7 +117,7 @@ def train_wordpiece(training_corpus, vocab_size):
     print(encoding.tokens)
     print(tokenizer.pre_tokenizer.pre_tokenize_str("Let's test this pre-tokenizer."))
     print(tokenizer.decode(encoding.ids))
-#    assert tokenizer.decode(encoding.ids) == "Let's test this tokenizer."
+    #    assert tokenizer.decode(encoding.ids) == "Let's test this tokenizer."
 
     return wrap(tokenizer)
 
@@ -132,27 +138,20 @@ def train_BPE(training_corpus, vocab_size):
     assert tokenizer.decode(encoding.ids) == "Let's test this tokenizer."
 
     return wrap(tokenizer)
-    #tokenizer.save("tokenizer.json")
-    #new_tokenizer = Tokenizer.from_file("tokenizer.json")
-
+    # tokenizer.save("tokenizer.json")
+    # new_tokenizer = Tokenizer.from_file("tokenizer.json")
 
 
 def from_model(name):
     if "apple" in name:
         print("For apple model we override to the llama-2 one")
         name = "meta-llama/Llama-2-7b-hf"
-    tokenizer = transformers.AutoTokenizer.from_pretrained(
-        name,
-        trust_remote_code=True,
-        padding_side="left",
-        add_eos_token=True,
-        add_bos_token=True,
-        use_fast=True,
-    )
+    tokenizer = transformers.AutoTokenizer.from_pretrained(name, trust_remote_code=True)
     tokenizer.pad_token = tokenizer.eos_token
     return tokenizer
 
-def from_dataset(dataset, variant:str, vocab_size:int):
+
+def from_data(dataset, variant: str, vocab_size: int):
     assert variant in ["wordpiece", "identity", "BPE"]
     assert "text" in dataset.column_names
 

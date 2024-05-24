@@ -6,26 +6,44 @@ import inspect
 import math
 import warnings
 from typing import List, Optional, Tuple, Union
-from transformers.modeling_outputs import (
-    BaseModelOutputWithPast, CausalLMOutput
-)
+from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutput
 import wandb
 import numpy as np
+
 
 class ClassifierHead(nn.Module):
     def __init__(self, in_features, n_layers, vocab_size, out_features, dropout):
         super().__init__()
+        norm = torch.nn.LayerNorm(in_features * 2, elementwise_affine=False, eps=1e-3)
         if dropout:
-            self.classifier = torch.nn.Sequential(nn.Dropout(dropout), nn.Linear(in_features * 2, out_features))
+            self.classifier = torch.nn.Sequential(
+                norm, nn.Dropout(dropout), nn.Linear(in_features * 2, out_features)
+            )
         else:
-            self.classifier = nn.Linear(in_features * 2, out_features)
+            self.classifier = torch.nn.Sequential(
+                norm, nn.Linear(in_features * 2, out_features)
+            )
+
     def forward(self, x):
-        return self.classifier(torch.concat([x.mean(1),x[:,-1]],1)
+        return self.classifier(torch.concat([x.mean(1), x[:, -1]], 1))
 
 
 class CustomConfig(transformers.PretrainedConfig):
-    model_type = 'custombackbonehead'
-    def __init__(self, backbone_config=None, backbone_name=None, backbone_pretrained=None, task=None, in_features=None, out_features=None, mixup=0, dropout=0, label_smoothing=0, **kwargs):
+    model_type = "custombackbonehead"
+
+    def __init__(
+        self,
+        backbone_config=None,
+        backbone_name=None,
+        backbone_pretrained=None,
+        task=None,
+        in_features=None,
+        out_features=None,
+        mixup=0,
+        dropout=0,
+        label_smoothing=0,
+        **kwargs,
+    ):
         self.backbone_config = backbone_config
         self.backbone_pretrained = backbone_pretrained
         self.backbone_name = backbone_name
@@ -37,6 +55,7 @@ class CustomConfig(transformers.PretrainedConfig):
         self.mixup = mixup
         self.label_smoothing = label_smoothing
         super().__init__(**kwargs)
+
 
 def dataset_to_max_length(name):
     if "rotten" in name:
@@ -54,30 +73,42 @@ def name_to_lora(name):
         return ["q_proj", "k_proj", "v_proj", "dense"]
 
 
-
 class CustomBackboneHead(transformers.PreTrainedModel):
     config_class = CustomConfig
+
     def __init__(self, config):
         super().__init__(config)
 
         if config.task == "lm":
-            self.head = nn.Linear(config.in_features, 1, config.out_features, bias=False)
+            self.head = nn.Linear(
+                config.in_features, 1, config.out_features, bias=False
+            )
         else:
             self.config.tie_word_embeddings = False
             if "apple" in config.backbone_name:
                 n_layers = config.backbone_config.num_transformer_layers + 1
             else:
                 raise NotImplementedError("NOT IMPLEMENTEDEF OR NOT APPLE")
-            self.head = ClassifierHead(config.in_features, n_layers, config.backbone_config.vocab_size, config.out_features, config.dropout)
+            self.head = ClassifierHead(
+                config.in_features,
+                n_layers,
+                config.backbone_config.vocab_size,
+                config.out_features,
+                config.dropout,
+            )
 
         if "apple" in config.backbone_name and not config.backbone_pretrained:
             model = modeling_openelm.OpenELMModel(config.backbone_config)
         elif type(config.backbone_pretrained) == bool and config.backbone_pretrained:
             if "apple" in config.backbone_name:
-                model = transformers.AutoModelForCausalLM.from_pretrained(config.backbone_name, trust_remote_code=True)
+                model = transformers.AutoModelForCausalLM.from_pretrained(
+                    config.backbone_name, trust_remote_code=True
+                )
                 model = model.transformer
             else:
-                model = transformers.AutoModel.from_pretrained(config.backbone_name, trust_remote_code=True)
+                model = transformers.AutoModel.from_pretrained(
+                    config.backbone_name, trust_remote_code=True
+                )
         elif config.backbone_pretrained:
             model = transformers.AutoModel.from_pretrained(config.backbone_pretrained)
         else:
@@ -121,8 +152,7 @@ class CustomBackboneHead(transformers.PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutput]:
-    
-    
+
         output_attentions = (
             output_attentions
             if output_attentions is not None
@@ -136,7 +166,7 @@ class CustomBackboneHead(transformers.PreTrainedModel):
         return_dict = (
             return_dict if return_dict is not None else self.config.use_return_dict
         )
-    
+
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
 
         # apply some mixup
@@ -162,7 +192,7 @@ class CustomBackboneHead(transformers.PreTrainedModel):
             return_dict=return_dict,
         )
         hidden_states = outputs[0]
-    
+
         loss = None
         if self.config.task == "lm":
             logits = self.head(outputs[0])
@@ -171,26 +201,46 @@ class CustomBackboneHead(transformers.PreTrainedModel):
             shift_logits = logits[..., :-1, :].contiguous()
             # Flatten the tokens
             shift_logits = shift_logits.view(-1, self.config.out_features)
-            loss = torch.nn.functional.cross_entropy(shift_logits, input_ids[:,1:].flatten())
+            loss = torch.nn.functional.cross_entropy(
+                shift_logits, input_ids[:, 1:].flatten()
+            )
         else:
             criterion = torch.nn.functional.cross_entropy
             logits = self.head(hidden_states)
-#            shift_logits = vocabs[..., :-1, :].contiguous()
-#            shift_logits = shift_logits.view(-1, self.config.backbone_config.vocab_size)
-            if args.mixup:
-                loss = criterion(logits, y_a.flatten(), label_smoothing=self.config.label_smoothing) * lam + (1 - lam) * criterion(logits, y_b.flatten(), label_smoothing=self.config.label_smoothing)
+            #            shift_logits = vocabs[..., :-1, :].contiguous()
+            #            shift_logits = shift_logits.view(-1, self.config.backbone_config.vocab_size)
+            if self.config.mixup:
+                loss = criterion(
+                    logits, y_a.flatten(), label_smoothing=self.config.label_smoothing
+                ) * lam + (1 - lam) * criterion(
+                    logits, y_b.flatten(), label_smoothing=self.config.label_smoothing
+                )
             else:
-                loss = criterion(logits, y_a.flatten(), label_smoothing=self.config.label_smoothing)
+                print(logits)
+                loss = criterion(
+                    logits,
+                    labels.flatten(),
+                    label_smoothing=self.config.label_smoothing,
+                )
 
         return CausalLMOutput(
             loss=loss,
             logits=logits,
-            hidden_states=None,#outputs.hidden_states,
-            attentions=None,#outputs.attentions,
+            hidden_states=None,  # outputs.hidden_states,
+            attentions=None,  # outputs.attentions,
         )
 
 
-def get_model(name, size="original", pretrained=True, task="lm", num_classes=None, mixup=0):
+def get_model(
+    name,
+    size="original",
+    pretrained=True,
+    task="lm",
+    num_classes=None,
+    mixup=0,
+    dropout=0,
+    label_smoothing=0,
+):
     if name not in MODELS:
         raise ValueError(f"`{name}` must be in {MODELS}")
     if pretrained and size != "original":
@@ -202,7 +252,9 @@ def get_model(name, size="original", pretrained=True, task="lm", num_classes=Non
     if task == "ft" and num_classes is None:
         raise ValueError("`num_classes` should be provided when using `task=lm`")
 
-    backbone_config = transformers.AutoConfig.from_pretrained(name, trust_remote_code=True)
+    backbone_config = transformers.AutoConfig.from_pretrained(
+        name, trust_remote_code=True
+    )
 
     if task == "ft":
         out_features = num_classes
@@ -219,8 +271,16 @@ def get_model(name, size="original", pretrained=True, task="lm", num_classes=Non
     elif "arctic" in name:
         in_features = backbone_config.hidden_size
 
-    config = CustomConfig(backbone_config=backbone_config, backbone_name=name, backbone_pretrained=pretrained, task=task, in_features=in_features, out_features=out_features, mixup=mixup)
+    config = CustomConfig(
+        backbone_config=backbone_config,
+        backbone_name=name,
+        backbone_pretrained=pretrained,
+        task=task,
+        in_features=in_features,
+        out_features=out_features,
+        mixup=mixup,
+        dropout=dropout,
+        label_smoothing=label_smoothing,
+    )
     model = CustomBackboneHead(config)
     return model
-
-

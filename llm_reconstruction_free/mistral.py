@@ -32,9 +32,9 @@ class MistralBackbone(torch.nn.Module):
         return_dict: Optional[bool] = None,
         ft_labels=None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
-    
+
         print("Using custom forward")
-    
+
         output_attentions = (
             output_attentions
             if output_attentions is not None
@@ -48,7 +48,7 @@ class MistralBackbone(torch.nn.Module):
         return_dict = (
             return_dict if return_dict is not None else self.config.use_return_dict
         )
-    
+
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.backbone(
             input_ids=input_ids,
@@ -62,10 +62,10 @@ class MistralBackbone(torch.nn.Module):
             return_dict=return_dict,
         )
         hidden_states = outputs[0]
-    
+
         logits = self.head(hidden_states)
         logits = logits.float()
-    
+
         loss = None
         if ft_labels is None:
             # Shift so that tokens < n predict n
@@ -77,7 +77,7 @@ class MistralBackbone(torch.nn.Module):
         else:
             loss = torch.nn.functional.cross_entropy(logits, ft_labels.flatten())
             print("Finetuning loss value", loss)
-    
+
         return dict(
             loss=loss,
             logits=logits,

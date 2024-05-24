@@ -6,7 +6,15 @@ from datasets import (
     concatenate_datasets,
 )
 
-NAMES = ["civil_comments", "imdb", "rotten_tomatoes", "sst2", "yelp_review_full", "imdb"]
+NAMES = [
+    "civil_comments",
+    "imdb",
+    "rotten_tomatoes",
+    "sst2",
+    "yelp_review_full",
+    "imdb",
+]
+
 
 def from_name(name):
     assert name in NAMES
@@ -22,7 +30,6 @@ def from_name(name):
         print(f"\t-{split}: {data[split].shape}")
     print("\t-columns:", data[split].column_names)
     return data
-
 
 
 def get_pretraining_dataset():
@@ -54,20 +61,24 @@ def get_rotten():
     test_dataset = test_dataset.rename_column("label", "labels")
     return train_dataset, test_dataset
 
+
 def get_yelp():
     train_dataset = load_dataset("yelp_review_full", split="train")
     test_dataset = load_dataset("yelp_review_full", split="test")
     return train_dataset, test_dataset
+
 
 def get_sst2():
     train_dataset = load_dataset("sst2", split="train")
     test_dataset = load_dataset("sst2", split="test")
     return train_dataset, test_dataset
 
+
 def get_civil():
     train_dataset = load_dataset("civil_comments", split="train")
     test_dataset = load_dataset("civil_comments", split="test")
     return train_dataset, test_dataset
+
 
 def get_snli():
     train_dataset = load_dataset("snli", split="train")
@@ -75,6 +86,7 @@ def get_snli():
     train_dataset = train_dataset.rename_column("label", "labels")
     test_dataset = test_dataset.rename_column("label", "labels")
     return train_dataset, test_dataset
+
 
 def get_imdb():
     train_dataset = load_dataset("imdb", split="train")
