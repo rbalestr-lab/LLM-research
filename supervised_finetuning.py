@@ -47,15 +47,19 @@ if __name__ == "__main__":
     )
     parser.add_argument("--training-steps", type=int, default=200)
     parser.add_argument("--per-device-batch-size", type=int, default=8)
-    parser.add_argument("--batch-size", type=int, default=128)
+    parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--pretrained", action="store_true")
     parser.add_argument("--weight-decay", type=float, default=1e-3)
     parser.add_argument("--learning-rate", type=float, default=1e-5)
     parser.add_argument("--dropout", type=float, default=0)
     parser.add_argument("--mixup", type=float, default=0)
+    parser.add_argument("--vocab-size", type=int, default=None)
+    parser.add_argument("--max-length", type=int, default=1024)
     parser.add_argument("--label-smoothing", type=float, default=0)
-
     args = parser.parse_args()
+
+    if not args.pretrained:
+        assert args.vocab_size is not None
 
     if int(os.environ["LOCAL_RANK"]) == 0:
         wandb.init(
@@ -66,17 +70,27 @@ if __name__ == "__main__":
 
     data = llm_reconstruction_free.data.from_name(args.dataset)
     train_dataset, test_dataset = data["train"], data["test"]
+
+    if args.pretrained:
+        tokenizer = llm_reconstruction_free.tokenizer.from_model(args.backbone)
+    else:
+        tokenizer = llm_reconstruction_free.tokenizer.from_data(train_dataset, variant="BPE", vocab_size=args.vocab_size)
+
+    print(f"Tokenizer vocab_size: {len(tokenizer.vocab)}")
+
     num_classes = int(np.max(train_dataset["labels"]) + 1)
     model = llm_reconstruction_free.utils.get_model(
         args.backbone,
+        tokenizer,
         pretrained=args.pretrained,
         task="ft",
         num_classes=num_classes,
         dropout=args.dropout,
         mixup=args.mixup,
         label_smoothing=args.label_smoothing,
+        torch_dtype=torch.float32,
+        max_length=args.max_length
     )
-    model = model.to(torch.float16)
 
     if args.lora_rank:
         config = LoraConfig(
@@ -95,14 +109,10 @@ if __name__ == "__main__":
     else:
         model.requires_grad_(True)
 
-    if args.pretrained:
-        tokenizer = llm_reconstruction_free.tokenizer.from_model(args.backbone)
-    else:
-        tokenizer = llm_reconstruction_free.tokenizer.from_data(train_dataset)
 
     train_dataset = train_dataset.map(
         lambda examples: tokenizer(
-            examples["text"], truncation=True, padding="max_length", max_length=1024
+            examples["text"], truncation=True, padding="max_length", max_length=args.max_length
         ),
         batched=True,
     )
@@ -112,16 +122,17 @@ if __name__ == "__main__":
 
     test_dataset = test_dataset.map(
         lambda examples: tokenizer(
-            examples["text"], truncation=True, padding="max_length", max_length=1024
+            examples["text"], truncation=True, padding="max_length", max_length=args.max_length
         ),
         batched=True,
     )
     test_dataset.set_format(
         type="torch", columns=["input_ids", "attention_mask", "labels"]
     )
-
+    
+    params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.AdamW(
-        model.parameters(), weight_decay=args.weight_decay, lr=args.learning_rate
+        params, weight_decay=args.weight_decay, lr=args.learning_rate
     )
     scheduler = transformers.get_cosine_schedule_with_warmup(
         optimizer,
@@ -135,10 +146,10 @@ if __name__ == "__main__":
         per_device_eval_batch_size=args.per_device_batch_size,
         gradient_accumulation_steps=args.batch_size // (8 * args.per_device_batch_size),
         max_steps=args.training_steps,
-        max_grad_norm=1,
+        max_grad_norm=0.01,
         logging_steps=5,
         logging_dir=f"~/supervised_finetuning/{args.dataset}/{args.backbone}/logs",
-        save_strategy="steps",
+#        save_strategy="steps",
         save_steps=100,
         eval_accumulation_steps=1,
         eval_strategy="steps",
@@ -147,6 +158,8 @@ if __name__ == "__main__":
         gradient_checkpointing=False,
         report_to="wandb",
         overwrite_output_dir="True",
+        save_strategy="no",
+        fp16=True
     )
 
     model.config.use_cache = False

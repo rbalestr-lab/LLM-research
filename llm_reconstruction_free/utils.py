@@ -12,9 +12,9 @@ import numpy as np
 
 
 class ClassifierHead(nn.Module):
-    def __init__(self, in_features, n_layers, vocab_size, out_features, dropout):
+    def __init__(self, in_features, out_features, dropout):
         super().__init__()
-        norm = torch.nn.LayerNorm(in_features * 2, elementwise_affine=False, eps=1e-3)
+        norm = torch.nn.Identity()#torch.nn.LayerNorm(in_features * 2, elementwise_affine=False, eps=1e-3)
         if dropout:
             self.classifier = torch.nn.Sequential(
                 norm, nn.Dropout(dropout), nn.Linear(in_features * 2, out_features)
@@ -42,6 +42,7 @@ class CustomConfig(transformers.PretrainedConfig):
         mixup=0,
         dropout=0,
         label_smoothing=0,
+        torch_dtype=torch.float16,
         **kwargs,
     ):
         self.backbone_config = backbone_config
@@ -54,6 +55,7 @@ class CustomConfig(transformers.PretrainedConfig):
         self.dropout = dropout
         self.mixup = mixup
         self.label_smoothing = label_smoothing
+        self.torch_dtype = torch_dtype
         super().__init__(**kwargs)
 
 
@@ -85,14 +87,8 @@ class CustomBackboneHead(transformers.PreTrainedModel):
             )
         else:
             self.config.tie_word_embeddings = False
-            if "apple" in config.backbone_name:
-                n_layers = config.backbone_config.num_transformer_layers + 1
-            else:
-                raise NotImplementedError("NOT IMPLEMENTEDEF OR NOT APPLE")
             self.head = ClassifierHead(
                 config.in_features,
-                n_layers,
-                config.backbone_config.vocab_size,
                 config.out_features,
                 config.dropout,
             )
@@ -102,17 +98,17 @@ class CustomBackboneHead(transformers.PreTrainedModel):
         elif type(config.backbone_pretrained) == bool and config.backbone_pretrained:
             if "apple" in config.backbone_name:
                 model = transformers.AutoModelForCausalLM.from_pretrained(
-                    config.backbone_name, trust_remote_code=True
+                    config.backbone_name, trust_remote_code=True, torch_dtype=config.torch_dtype
                 )
                 model = model.transformer
             else:
                 model = transformers.AutoModel.from_pretrained(
-                    config.backbone_name, trust_remote_code=True
+                    config.backbone_name, trust_remote_code=True, torch_dtype=config.torch_dtype
                 )
         elif config.backbone_pretrained:
-            model = transformers.AutoModel.from_pretrained(config.backbone_pretrained)
+            model = transformers.AutoModel.from_pretrained(config.backbone_pretrained, torch_dtype=config.torch_dtype)
         else:
-            model = transformers.AutoModel.from_config(config.backbone_config)
+            model = transformers.AutoModel.from_config(config.backbone_config, torch_dtype=config.torch_dtype)
 
         if "arctic" in config.backbone_name:
             model.pooler = torch.nn.Identity()
@@ -171,7 +167,10 @@ class CustomBackboneHead(transformers.PreTrainedModel):
 
         # apply some mixup
         if self.config.task == "ft" and self.training and self.config.mixup:
-            inputs_embeds = self.backbone.token_embeddings(input_ids)
+            if hasattr(self.backbone, "token_embeddings"):
+                inputs_embeds = self.backbone.token_embeddings(input_ids)
+            else:
+                inputs_embeds = self.backbone.embed_tokens(input_ids)
             lam = np.random.beta(self.config.mixup, self.config.mixup)
             batch_size = input_ids.size(0)
             index = torch.randperm(batch_size, device=input_ids.device)
@@ -216,7 +215,6 @@ class CustomBackboneHead(transformers.PreTrainedModel):
                     logits, y_b.flatten(), label_smoothing=self.config.label_smoothing
                 )
             else:
-                print(logits)
                 loss = criterion(
                     logits,
                     labels.flatten(),
@@ -233,6 +231,7 @@ class CustomBackboneHead(transformers.PreTrainedModel):
 
 def get_model(
     name,
+    tokenizer,
     size="original",
     pretrained=True,
     task="lm",
@@ -240,6 +239,8 @@ def get_model(
     mixup=0,
     dropout=0,
     label_smoothing=0,
+    torch_dtype=torch.float16,
+    max_length=None
 ):
     if name not in MODELS:
         raise ValueError(f"`{name}` must be in {MODELS}")
@@ -247,7 +248,7 @@ def get_model(
         raise ValueError("size must be `original` when using `pretrained=True`")
     if task not in ["lm", "ft"]:
         raise ValueError(
-            "Task must be one of `lm` (next-token prediction), `ft` (supervised sequence classification)"
+            f"Task must be one of `lm` (next-token prediction), `ft` (supervised sequence classification)"
         )
     if task == "ft" and num_classes is None:
         raise ValueError("`num_classes` should be provided when using `task=lm`")
@@ -255,6 +256,19 @@ def get_model(
     backbone_config = transformers.AutoConfig.from_pretrained(
         name, trust_remote_code=True
     )
+
+    if max_length is not None:
+        if "apple" in name:
+            backbone_config.rope_max_length = max_length
+        elif "phi" in name:
+            backbone_config.max_position_embeddings = max_length
+
+    backbone_config.eos_token_id = tokenizer.eos_token_id 
+    backbone_config.bos_token_id = tokenizer.bos_token_id
+    backbone_config.vocab_size = len(tokenizer.vocab)
+
+    print(backbone_config)
+
 
     if task == "ft":
         out_features = num_classes
@@ -281,6 +295,7 @@ def get_model(
         mixup=mixup,
         dropout=dropout,
         label_smoothing=label_smoothing,
+        torch_dtype=torch_dtype
     )
     model = CustomBackboneHead(config)
     return model
