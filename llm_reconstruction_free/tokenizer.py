@@ -19,6 +19,7 @@ SPECIAL_TOKENS = dict(
     bos_token="<s>",
     eos_token="</s>",
 )
+NAMES = ["wordpiece", "identity", "BPE"]
 
 
 def get_normalizer(lower_case=True, accents=True, quotes=True):
@@ -154,7 +155,7 @@ def from_model(name):
 
 
 def from_data(dataset, variant: str, vocab_size: int):
-    assert variant in ["wordpiece", "identity", "BPE"]
+    assert variant in NAMES
     assert "text" in dataset.column_names
 
     def dataset_iterator():
