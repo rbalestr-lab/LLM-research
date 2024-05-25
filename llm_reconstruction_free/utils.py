@@ -208,7 +208,7 @@ class CustomBackboneHead(transformers.PreTrainedModel):
             logits = self.head(hidden_states)
             #            shift_logits = vocabs[..., :-1, :].contiguous()
             #            shift_logits = shift_logits.view(-1, self.config.backbone_config.vocab_size)
-            if self.config.mixup:
+            if self.config.mixup and self.training:
                 loss = criterion(
                     logits, y_a.flatten(), label_smoothing=self.config.label_smoothing
                 ) * lam + (1 - lam) * criterion(
