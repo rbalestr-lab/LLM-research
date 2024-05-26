@@ -29,7 +29,7 @@ import wandb
 import bitsandbytes
 from sklearn import metrics
 import numpy as np
-
+from pathlib import Path
 
 if __name__ == "__main__":
     parser = ArgumentParser()
@@ -42,8 +42,12 @@ if __name__ == "__main__":
     parser.add_argument("--lora-rank", type=int, default=0)
     parser.add_argument(
         "--dataset",
-        default="rotten_tomatoes",
+        default=None,
         choices=llm_reconstruction_free.data.NAMES,
+    )
+    parser.add_argument(
+        "--dataset-path",
+        type=Path
     )
     parser.add_argument("--training-steps", type=int, default=200)
     parser.add_argument("--per-device-batch-size", type=int, default=8)
@@ -60,6 +64,9 @@ if __name__ == "__main__":
 
     if not args.pretrained:
         assert args.vocab_size is not None
+    if args.dataset is None:
+        assert args.dataset_path.is_dir()
+        args.dataset = args.dataset_path
 
 
     data = llm_reconstruction_free.data.from_name(args.dataset)
