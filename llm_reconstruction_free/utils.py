@@ -10,6 +10,8 @@ from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutpu
 import wandb
 import numpy as np
 
+from . import gcs
+
 
 class ClassifierHead(nn.Module):
     def __init__(self, in_features, out_features, dropout):
@@ -43,6 +45,7 @@ class CustomConfig(transformers.PretrainedConfig):
         dropout=0,
         label_smoothing=0,
         torch_dtype=torch.float16,
+        local_cache=None,
         **kwargs,
     ):
         self.backbone_config = backbone_config
@@ -56,6 +59,7 @@ class CustomConfig(transformers.PretrainedConfig):
         self.mixup = mixup
         self.label_smoothing = label_smoothing
         self.torch_dtype = torch_dtype
+        self.local_cache = local_cache
         super().__init__(**kwargs)
 
 
@@ -96,15 +100,30 @@ class CustomBackboneHead(transformers.PreTrainedModel):
         if "apple" in config.backbone_name and not config.backbone_pretrained:
             model = modeling_openelm.OpenELMModel(config.backbone_config)
         elif type(config.backbone_pretrained) == bool and config.backbone_pretrained:
-            if "apple" in config.backbone_name:
-                model = transformers.AutoModelForCausalLM.from_pretrained(
-                    config.backbone_name, trust_remote_code=True, torch_dtype=config.torch_dtype
-                )
-                model = model.transformer
+            if config.local_cache:
+                print("Loading from GCS...")
+                if "apple" in config.backbone_name:
+                    model = transformers.AutoModelForCausalLM.from_pretrained(
+                        config.local_cache, trust_remote_code=True,
+                        torch_dtype=config.torch_dtype,
+                    )
+                    model = model.transformer
+                else:
+                    model = transformers.AutoModel.from_pretrained(
+                        config.local_cache, trust_remote_code=True,
+                        torch_dtype=config.torch_dtype,
+                    )
             else:
-                model = transformers.AutoModel.from_pretrained(
-                    config.backbone_name, trust_remote_code=True, torch_dtype=config.torch_dtype
-                )
+                print("Loading from HuggingFace...")
+                if "apple" in config.backbone_name:
+                    model = transformers.AutoModelForCausalLM.from_pretrained(
+                        config.backbone_name, trust_remote_code=True, torch_dtype=config.torch_dtype
+                    )
+                    model = model.transformer
+                else:
+                    model = transformers.AutoModel.from_pretrained(
+                        config.backbone_name, trust_remote_code=True, torch_dtype=config.torch_dtype
+                    )
         elif config.backbone_pretrained:
             model = transformers.AutoModel.from_pretrained(config.backbone_pretrained, torch_dtype=config.torch_dtype)
         else:
@@ -240,7 +259,8 @@ def get_model(
     dropout=0,
     label_smoothing=0,
     torch_dtype=torch.float16,
-    max_length=None
+    max_length=None,
+    from_gcs: str = None,
 ):
     if name not in MODELS:
         raise ValueError(f"`{name}` must be in {MODELS}")
@@ -253,12 +273,16 @@ def get_model(
     if task == "ft" and num_classes is None:
         raise ValueError("`num_classes` should be provided when using `task=lm`")
 
-    backbone_config = transformers.AutoConfig.from_pretrained(
-        name, trust_remote_code=True
-    )
+    local_cache = None
+    if from_gcs:
+        local_cache = gcs.local_copy(from_gcs, "models", name)
+        backbone_config = transformers.AutoConfig.from_pretrained(
+            local_cache, trust_remote_code=True)
+    else:
+        backbone_config = transformers.AutoConfig.from_pretrained(name, trust_remote_code=True)
 
     if max_length is not None:
-        if "apple" in name:
+        if True or "apple" in name:
             backbone_config.rope_max_length = max_length
         elif "phi" in name:
             backbone_config.max_position_embeddings = max_length
@@ -295,7 +319,8 @@ def get_model(
         mixup=mixup,
         dropout=dropout,
         label_smoothing=label_smoothing,
-        torch_dtype=torch_dtype
+        torch_dtype=torch_dtype,
+        local_cache=local_cache,
     )
     model = CustomBackboneHead(config)
     return model

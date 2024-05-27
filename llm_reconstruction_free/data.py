@@ -3,8 +3,11 @@ from datasets import (
     load_dataset_builder,
     get_dataset_split_names,
     load_dataset,
+    load_from_disk,
     concatenate_datasets,
 )
+
+from . import gcs
 
 NAMES = [
     "civil_comments",
@@ -15,14 +18,23 @@ NAMES = [
 ]
 
 
-def from_name(name):
+def from_name(name: str, from_gcs: str = None):
     assert name in NAMES
     print(f"Loading {name}")
-    splits = get_dataset_split_names(name)
+    local_cache = None
+    if from_gcs:
+        local_cache = gcs.local_copy(from_gcs, "datasets", name)
+        splits = get_dataset_split_names(local_cache)
+    else:
+        splits = get_dataset_split_names(name)
     print("\t-splits:", splits)
-    data = dict()
+    if from_gcs:
+        data = load_from_disk(local_cache)
+    else:
+        data = dict()
+        for split in splits:
+            data[split] = load_dataset(name, split=split)
     for split in splits:
-        data[split] = load_dataset(name, split=split)
         if "label" in data[split].column_names:
             data[split] = data[split].rename_column("label", "labels")
         assert "text" in data[split].column_names

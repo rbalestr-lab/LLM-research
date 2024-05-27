@@ -11,6 +11,8 @@ from tokenizers import (
 import transformers
 from tqdm import tqdm
 
+from . import gcs
+
 SPECIAL_TOKENS = dict(
     unk_token="[UNK]",
     cls_token="[CLS]",
@@ -145,11 +147,17 @@ def train_BPE(training_corpus, vocab_size):
     # new_tokenizer = Tokenizer.from_file("tokenizer.json")
 
 
-def from_model(name):
+def from_model(name, from_gcs: str = None):
     if "apple" in name:
         print("For apple model we override to the llama-2 one")
         name = "meta-llama/Llama-2-7b-hf"
-    tokenizer = transformers.AutoTokenizer.from_pretrained(name, trust_remote_code=True)
+    if from_gcs:
+        local_cache = gcs.local_copy(from_gcs, "tokenizers", name)
+        tokenizer = transformers.AutoTokenizer.from_pretrained(
+                local_cache, trust_remote_code=True)
+    else:
+        tokenizer = transformers.AutoTokenizer.from_pretrained(
+                name, trust_remote_code=True)
     tokenizer.pad_token = tokenizer.eos_token
     return tokenizer
 

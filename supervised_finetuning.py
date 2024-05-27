@@ -1,3 +1,4 @@
+import os
 import transformers
 import torch
 from transformers import (
@@ -29,7 +30,7 @@ import wandb
 import bitsandbytes
 from sklearn import metrics
 import numpy as np
-from pathlib import Path
+
 
 if __name__ == "__main__":
     parser = ArgumentParser()
@@ -42,12 +43,8 @@ if __name__ == "__main__":
     parser.add_argument("--lora-rank", type=int, default=0)
     parser.add_argument(
         "--dataset",
-        default=None,
+        default="rotten_tomatoes",
         choices=llm_reconstruction_free.data.NAMES,
-    )
-    parser.add_argument(
-        "--dataset-path",
-        type=Path
     )
     parser.add_argument("--training-steps", type=int, default=200)
     parser.add_argument("--per-device-batch-size", type=int, default=8)
@@ -60,20 +57,19 @@ if __name__ == "__main__":
     parser.add_argument("--vocab-size", type=int, default=None)
     parser.add_argument("--max-length", type=int, default=1024)
     parser.add_argument("--label-smoothing", type=float, default=0)
+    parser.add_argument("--from-gcs", type=str, default=None)
     args = parser.parse_args()
 
     if not args.pretrained:
         assert args.vocab_size is not None
-    if args.dataset is None:
-        assert args.dataset_path.is_dir()
-        args.dataset = args.dataset_path
 
-
-    data = llm_reconstruction_free.data.from_name(args.dataset)
+    data = llm_reconstruction_free.data.from_name(
+            args.dataset, from_gcs=args.from_gcs)
     train_dataset, test_dataset = data["train"], data["test"]
 
     if args.pretrained:
-        tokenizer = llm_reconstruction_free.tokenizer.from_model(args.backbone)
+        tokenizer = llm_reconstruction_free.tokenizer.from_model(
+                args.backbone, from_gcs=args.from_gcs)
     else:
         tokenizer = llm_reconstruction_free.tokenizer.from_data(train_dataset, variant="BPE", vocab_size=args.vocab_size)
 
@@ -90,7 +86,8 @@ if __name__ == "__main__":
         mixup=args.mixup,
         label_smoothing=args.label_smoothing,
         torch_dtype=torch.float32,
-        max_length=args.max_length
+        max_length=args.max_length,
+        from_gcs=args.from_gcs,
     )
 
     if args.lora_rank:
