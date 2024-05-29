@@ -15,6 +15,8 @@ NAMES = [
     "sst2",
     "yelp_review_full",
     "imdb",
+    "wiki_toxic",
+    "toxigen-data",
 ]
 
 
@@ -37,6 +39,12 @@ def from_name(name: str, from_gcs: str = None):
     for split in splits:
         if "label" in data[split].column_names:
             data[split] = data[split].rename_column("label", "labels")
+        if name == "wiki_toxic":
+            assert "comment_text" in data[split].column_names
+            data[split] = data[split].rename_column("comment_text", "text")
+        elif name == "toxigen-data":
+            assert "toxicity_human" in data[split].column_names
+            data[split] = data[split].rename_column("toxicity_human", "labels")
         assert "text" in data[split].column_names
         print(f"\t-{split}: {data[split].shape}")
     print("\t-columns:", data[split].column_names)
