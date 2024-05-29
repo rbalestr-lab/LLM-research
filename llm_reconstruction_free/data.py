@@ -16,12 +16,16 @@ NAMES = [
     "yelp_review_full",
     "imdb",
     "wiki_toxic",
-    "toxigen-data",
+    "toxigen",
 ]
 
 
 def from_name(name: str, from_gcs: str = None):
     assert name in NAMES
+    if name == "wiki_toxic":
+        name = "OxAISH-AL-LLM/wiki_toxic"
+    elif name == "toxigen":
+        name = "toxigen/toxigen-data"
     print(f"Loading {name}")
     local_cache = None
     if from_gcs:
@@ -39,10 +43,10 @@ def from_name(name: str, from_gcs: str = None):
     for split in splits:
         if "label" in data[split].column_names:
             data[split] = data[split].rename_column("label", "labels")
-        if name == "wiki_toxic":
+        if name == "OxAISH-AL-LLM/wiki_toxic":
             assert "comment_text" in data[split].column_names
             data[split] = data[split].rename_column("comment_text", "text")
-        elif name == "toxigen-data":
+        elif name == "toxigen/toxigen-data":
             assert "toxicity_human" in data[split].column_names
             data[split] = data[split].rename_column("toxicity_human", "labels")
         assert "text" in data[split].column_names
