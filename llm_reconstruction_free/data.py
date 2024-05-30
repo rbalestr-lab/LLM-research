@@ -5,6 +5,8 @@ from datasets import (
     load_dataset,
     load_from_disk,
     concatenate_datasets,
+    Features,
+    Value
 )
 
 from . import gcs
@@ -17,6 +19,7 @@ NAMES = [
     "imdb",
     "wiki_toxic",
     "toxigen",
+    "bias_in_bios"
 ]
 
 
@@ -26,6 +29,8 @@ def from_name(name: str, from_gcs: str = None):
         name = "OxAISH-AL-LLM/wiki_toxic"
     elif name == "toxigen":
         name = "toxigen/toxigen-data"
+    elif name == "bias_in_bios":
+        name = "LabHC/bias_in_bios"
     print(f"Loading {name}")
     local_cache = None
     if from_gcs:
@@ -49,6 +54,9 @@ def from_name(name: str, from_gcs: str = None):
         elif name == "toxigen/toxigen-data":
             assert "toxicity_human" in data[split].column_names
             data[split] = data[split].rename_column("toxicity_human", "labels")
+        elif name == "LabHC/bias_in_bios":
+            data[split] = data[split].rename_column("hard_text", "text")
+            data[split] = data[split].rename_column("profession", "labels")
         assert "text" in data[split].column_names
         print(f"\t-{split}: {data[split].shape}")
     print("\t-columns:", data[split].column_names)
