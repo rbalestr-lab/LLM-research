@@ -1,30 +1,42 @@
 import wandb
 import pandas as pd
 import numpy as np
-
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 df = pd.DataFrame(columns=["dataset", "arch", "pct", "acc"])
 api = wandb.Api()
 
 runs = api.runs("llm-reconstruction-free/supervised_finetuning")
 all_data = []
+scatter_x = {}
+scatter_y_with = {}
+scatter_y_without = {}
+
+model = []
+comparison_with = {}
+comparison_without = {}
 for run in runs:
     if run.state != "finished":
         continue
     try:
-        print(run.state, run.config["backbone"], run.config["dataset"], 
-                run.config["freeze"], run.config["lora_rank"], run.config["pretrained"])
         if "L4" in run.metadata["gpu_devices"][0]["name"]:
             continue
         data = []
-        for i, row in run.history().iterrows():
+        for row in run.scan_history():
             data.append([
                 row["eval/accuracy"],
                 row["eval/balanced_accuracy"],
-                row["eval/F1"]
+                row["eval/F1"],
+                row["eval/loss"],
+                row["train/loss"]
                 ])
-        timeseries = pd.DataFrame(np.asarray(data), columns=["accuracy", "balanced_accuracy", "F1"])
-        timeseries = (timeseries.dropna().reset_index() * 100).round(2)
+        timeseries = pd.DataFrame(np.asarray(data), columns=["accuracy", "balanced_accuracy", "F1", "eval/loss", "train/loss"])
+        timeseries["train/loss"] = timeseries["train/loss"].fillna(method="ffill")
+
+        scatter = timeseries["F1"].dropna().astype(float) * 100
+
+        timeseries = (timeseries.fillna(method="ffill") * 100).round(2)
         all_data.append(timeseries.iloc[-1])
         init = "pretrained" if run.config["pretrained"] else "random"
         if run.config["lora_rank"]:
@@ -34,6 +46,17 @@ for run in runs:
             ft = "None"
         elif run.config["freeze"] == 0:
             ft = "full"
+            if run.config["pretrained"]:
+                comparison_with[f"{run.config['dataset']}_{run.config['backbone']}"] = timeseries["train/loss"]
+
+                scatter_y_with[f"{run.config['dataset']} {run.config['backbone']}"] = scatter.to_list()
+            else:
+                comparison_without[f"{run.config['dataset']}_{run.config['backbone']}"] = timeseries["train/loss"]
+                scatter_y_without[f"{run.config['dataset']} {run.config['backbone']}"] = scatter.to_list()
+
+            scatter_x[f"{run.config['dataset']} {run.config['backbone']}"] = list(np.linspace(0,1,len(scatter))*100)
+            model.extend([run.config["backbone"]] * len(scatter))
+            print(scatter_y_with, scatter_y_without)
         else:
             raise RuntimeError()
 
@@ -41,14 +64,61 @@ for run in runs:
         all_data[-1]["backbone"] = str(run.config["backbone"]).replace("_", "-")
         all_data[-1]["finetuning"] = ft
         all_data[-1]["init"] = init
-
+        print(scatter_x)
 
     except Exception as e:
         print(e)
     continue
 
+
+
+#fig, ax = plt.subplots(1,1, figsize=(9,9))
+#for name in comparison_with:
+#    if "OpenELM-1-1B" not in name:
+#        continue
+#    ax.plot(comparison_with[name], color="blue")
+#    ax.plot(comparison_without[name], color="black")
+#plt.tight_layout()
+#plt.savefig("comparison_dynamics.pdf")
+#plt.close()
+
+
+sns.set(font_scale=2)
+fig, axs = plt.subplots(1,3, figsize=(18,6))
+i = 0
+for name in scatter_y_with:
+    if "OpenELM-1_1B" not in name:
+        continue
+    if "bios" in name:
+        continue
+    if "wiki" in name:
+        continue
+    axs[i].plot(scatter_x[name], scatter_y_with[name], color="green")
+    axs[i].plot(scatter_x[name], scatter_y_without[name], color="blue")
+    axs[i].set_title(name.split(" ")[0])
+    axs[i].set_xlabel("% training epochs")
+    i += 1
+axs[0].set_ylabel("test F1 score")
+#df = pd.DataFrame(np.stack([scatter_x, scatter_y, model], 1), columns = ["% training steps", "eval F1", "model"])
+#df = df.astype({"eval F1":float, "% training steps":float})
+#print(df)
+#sns.lineplot(df, x="% training steps", y="eval F1", hue="model", ax=ax, markers=True, dashes=False)
+#lims = [
+#    np.min([ax.get_xlim(), ax.get_ylim()]),  # min of both axes
+#    np.max([ax.get_xlim(), ax.get_ylim()]),  # max of both axes
+#]
+#
+## now plot both limits against eachother
+#ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0, linewidth=3)
+#ax.set_aspect('equal')
+
+plt.tight_layout()
+plt.savefig("scatter_train_test.pdf")
+plt.close()
+
 df = pd.concat(all_data, axis=1).T
 df = pd.pivot_table(df, values="F1", index=["dataset", "backbone"], columns=["init", "finetuning"], aggfunc="mean")
+df = df.loc[(slice(None), ["microsoft/phi-2", "apple/OpenELM-1-1B", "apple/OpenELM-450M", "apple/OpenELM-270M"]),:].sort_index(level=0)
 cols = np.asarray(df.columns)
 cols[[0,1,2,3]] = cols[[2,1,0,3]]
 df.columns = pd.MultiIndex.from_tuples(cols)
