@@ -85,7 +85,7 @@ if __name__ == "__main__":
         dropout=args.dropout,
         mixup=args.mixup,
         label_smoothing=args.label_smoothing,
-        torch_dtype=torch.float32,
+        torch_dtype=torch.float32 if "mistralai" not in args.backbone else "auto",
         max_length=args.max_length,
         from_gcs=args.from_gcs,
     )
@@ -157,7 +157,7 @@ if __name__ == "__main__":
         overwrite_output_dir="True",
         save_strategy="no",
         load_best_model_at_end=False,
-        fp16=True
+        fp16=True if "mistralai" not in args.backbone else False
     )
 
     model.config.use_cache = False

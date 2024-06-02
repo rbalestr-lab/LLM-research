@@ -12,14 +12,18 @@ from datasets import (
 from . import gcs
 
 NAMES = [
-    "civil_comments",
+#    "civil_comments",
     "rotten_tomatoes",
     "sst2",
     "yelp_review_full",
     "imdb",
     "wiki_toxic",
     "toxigen",
-    "bias_in_bios"
+    "bias_in_bios",
+    "polarity"
+    "emotion",
+    "snli",
+    "medical"
 ]
 
 
@@ -31,6 +35,16 @@ def from_name(name: str, from_gcs: str = None):
         name = "toxigen/toxigen-data"
     elif name == "bias_in_bios":
         name = "LabHC/bias_in_bios"
+    elif name == "emotion":
+        name = "dair-ai/emotion"
+    elif name == "polarity":
+        name = "fancyzhx/amazon_polarity"
+    elif name == "snli":
+        name = "stanfordnlp/snli"
+    elif name == "sst2":
+        name = "stanfordnlp/sst2"
+    elif name == "medical":
+        name = "medical_questions_pairs"
     print(f"Loading {name}")
     local_cache = None
     if from_gcs:
@@ -57,6 +71,24 @@ def from_name(name: str, from_gcs: str = None):
         elif name == "LabHC/bias_in_bios":
             data[split] = data[split].rename_column("hard_text", "text")
             data[split] = data[split].rename_column("profession", "labels")
+        elif name == "fancyzhx/amazon_polarity":
+            data[split] = data[split].rename_column("content", "text")
+        elif name == "stanfordnlp/snli":
+            def preprocess(example):
+                for i, v in enumerate(example["hypothesis"]):
+                    example["premise"][i] += " " + v
+                    return example
+            data[split] = data[split].map(preprocess, batched=True)
+            data[split] = data[split].rename_column("premise", "text")
+        elif name == "stanfordnlp/sst2":
+            data[split] = data[split].rename_column("sentence", "text")
+        elif name == "medical_questions_pairs":
+            def preprocess(example):
+                for i, v in enumerate(example["question_2"]):
+                    example["question_1"][i] += " " + v
+                    return example
+            data[split] = data[split].map(preprocess, batched=True)
+            data[split] = data[split].rename_column("question_1", "text")
         assert "text" in data[split].column_names
         print(f"\t-{split}: {data[split].shape}")
     print("\t-columns:", data[split].column_names)
