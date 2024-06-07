@@ -1,15 +1,66 @@
-training_steps=600
+function run_one() {
+  training_steps=${1}
+  per_device_batch_size=${2}
+  backbone=${3}
+  dataset=${4}
+  from_gcs=${5}
+  eval_steps=${6}
+  lora_rank=${7}
+  freeze=${8}
+  vocab_size=${9}
+  pretrained=${10}
+  torchrun --nproc-per-node 8 supervised_finetuning.py --dataset $dataset \
+    $pretrained --training-steps $training_steps \
+    --per-device-batch-size $per_device_batch_size --backbone $backbone \
+    --from-gcs=$from_gcs --lora-rank=$lora_rank $freeze \
+    --vocab-size=$vocab_size --eval-steps=$eval_steps
+  if [[ ! -z "${from_gcs}" ]]
+  then
+    gsutil -m cp -r /workdir/xcloud/wandb/* ${from_gcs}/wandb
+    rm -rf /workdir/xcloud/wandb/*
+  fi
+}
+
+function run_suite() {
+  training_steps=${1}
+  per_device_batch_size=${2}
+  backbone=${3}
+  dataset=${4}
+  from_gcs=${5}
+  eval_steps=${6}
+  run_one ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps} "0" "" "0" "--pretrained"
+  run_one ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps} "4" "" "0" "--pretrained"
+  run_one ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps} "32" "" "0" "--pretrained"
+  run_one ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps} "0" "--freeze" "0" "--pretrained"
+  run_one ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps} "0" "" "4000" ""
+}
+
+# Smoke tests to run all the datasets, all the backbones, and run_suite() once.
+training_steps=20
 per_device_batch_size=1
+backbone=apple/OpenELM-270M
+dataset=rotten_tomatoes
+from_gcs=gs://haih-e1ff76673758
+eval_steps=20
 
-# pretrained model that will fully fine-tune
-torchrun --nproc-per-node 8 supervised_finetuning.py --freeze --dataset rotten_tomatoes --pretrained --training-steps $training_steps --per-device-batch-size $per_device_batch_size --backbone mistralai/Mistral-7B-v0.1 --max-length 256
+for dataset in "rotten_tomatoes" "sst2" "yelp_review_full" "imdb" "wiki_toxic" \
+  "toxigen" "bias_in_bios" "polarity" "emotion" "snli" "medical"
+do
+  echo "# wandb sync dataset ${dataset}"
+  run_one ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps} "0" "--freeze" "0" "--pretrained"
+done
 
-# pretrained model that is frozen and fine-tuned with LORA
-#torchrun --nproc-per-node 8 supervised_finetuning.py --dataset rotten_tomatoes --pretrained --training-steps $training_steps --per-device-batch-size $per_device_batch_size --lora-rank 4
-#torchrun --nproc-per-node 8 supervised_finetuning.py --dataset rotten_tomatoes --pretrained --training-steps $training_steps --per-device-batch-size $per_device_batch_size --lora-rank 32
+dataset=rotten_tomatoes
+for backbone in "apple/OpenELM-270M" "apple/OpenELM-450M" "apple/OpenELM-1_1B" \
+  "apple/OpenELM-3B" "meta-llama/Meta-Llama-3-8B" "microsoft/phi-2" \
+  "Snowflake/snowflake-arctic-embed-xs" "Snowflake/snowflake-arctic-embed-s" \
+  "Snowflake/snowflake-arctic-embed-m" "Snowflake/snowflake-arctic-embed-l" \
+  "mistralai/Mistral-7B-v0.1"
+do
+  echo "# wandb sync backbone ${backbone}"
+  run_one ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps} "0" "--freeze" "0" "--pretrained"
+done
 
-# pretrained model that is frozen and not fine-tuned (baseline)
-#torchrun --nproc-per-node 8 supervised_finetuning.py --dataset rotten_tomatoes --pretrained --freeze --training-steps $training_steps --per-device-batch-size $per_device_batch_size
-
-# randomly initialized model that we train from scratch, including tokenizer
-#torchrun --nproc-per-node 8 supervised_finetuning.py --dataset rotten_tomatoes --training-steps $training_steps --per-device-batch-size $per_device_batch_size --vocab-size 4000
+backbone=apple/OpenELM-270M
+echo "# wandb sync run_suite"
+run_suite ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps}

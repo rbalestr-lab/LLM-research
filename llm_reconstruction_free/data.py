@@ -20,7 +20,7 @@ NAMES = [
     "wiki_toxic",
     "toxigen",
     "bias_in_bios",
-    "polarity"
+    "polarity",
     "emotion",
     "snli",
     "medical"
@@ -50,6 +50,8 @@ def from_name(name: str, from_gcs: str = None):
     if from_gcs:
         local_cache = gcs.local_copy(from_gcs, "datasets", name)
         splits = get_dataset_split_names(local_cache)
+        if name == "LabHC/bias_in_bios":
+            splits = ["train", "test", "dev"]
     else:
         splits = get_dataset_split_names(name)
     print("\t-splits:", splits)
@@ -71,6 +73,8 @@ def from_name(name: str, from_gcs: str = None):
         elif name == "LabHC/bias_in_bios":
             data[split] = data[split].rename_column("hard_text", "text")
             data[split] = data[split].rename_column("profession", "labels")
+            if from_gcs and split == "dev":
+                data["validation"] = data["dev"]
         elif name == "fancyzhx/amazon_polarity":
             data[split] = data[split].rename_column("content", "text")
         elif name == "stanfordnlp/snli":

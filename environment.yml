@@ -136,7 +136,7 @@ dependencies:
       - gitpython==3.1.43
       - h5py==3.11.0
       - hjson==3.1.0
-      - huggingface-hub==0.22.2
+      - huggingface-hub==0.23.0
       - imageio==2.34.1
       - joblib==1.4.2
       - kiwisolver==1.4.5
@@ -183,7 +183,7 @@ dependencies:
       - tomli==2.0.1
       - torchmetrics==1.4.0
       - tqdm==4.66.2
-      - transformers==4.41.0.dev0
+      - transformers==4.41.1
       - tzdata==2024.1
       - wandb==0.17.0
       - xxhash==3.4.1
