@@ -58,6 +58,7 @@ if __name__ == "__main__":
     parser.add_argument("--max-length", type=int, default=1024)
     parser.add_argument("--label-smoothing", type=float, default=0)
     parser.add_argument("--from-gcs", type=str, default=None)
+    parser.add_argument("--eval-steps", type=int, default=20)
     args = parser.parse_args()
 
     if not args.pretrained:
@@ -150,7 +151,7 @@ if __name__ == "__main__":
 #        save_steps=100,
         eval_accumulation_steps=1,
         eval_strategy="steps",
-        eval_steps=20,
+        eval_steps=args.eval_steps,
         dataloader_num_workers=2,
         gradient_checkpointing=False,
         report_to="wandb",

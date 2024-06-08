@@ -4,7 +4,7 @@ MODELS = [
     "apple/OpenELM-1_1B",
     "apple/OpenELM-3B",
     #    "meta-llama/Llama-2-7b",
-    #    "meta-llama/Llama-3-8B",
+    "meta-llama/Meta-Llama-3-8B",
     "microsoft/phi-2",
     #    "openai-community/gpt2",
     "meta-llama/Meta-Llama-3-8B",
