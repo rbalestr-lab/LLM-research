@@ -282,9 +282,9 @@ def get_model(
         backbone_config = transformers.AutoConfig.from_pretrained(name, trust_remote_code=True)
 
     if max_length is not None:
-        if True or "apple" in name:
+        if "apple" in name:
             backbone_config.rope_max_length = max_length
-        elif "phi" in name:
+        elif "phi" in name or "arctic" in name or "mistral" in name or "llama" in name:
             backbone_config.max_position_embeddings = max_length
 
     backbone_config.eos_token_id = tokenizer.eos_token_id 

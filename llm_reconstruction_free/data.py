@@ -93,8 +93,12 @@ def from_name(name: str, from_gcs: str = None):
                     return example
             data[split] = data[split].map(preprocess, batched=True)
             data[split] = data[split].rename_column("question_1", "text")
+        data[split] = data[split].filter(lambda row:row["labels"]>=0)
         assert "text" in data[split].column_names
         print(f"\t-{split}: {data[split].shape}")
+    if name == "stanfordnlp/sst2":
+        data["test"] = data["validation"]
+        del data["validation"]
     print("\t-columns:", data[split].column_names)
     return data
 

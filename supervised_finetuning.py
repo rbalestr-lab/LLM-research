@@ -39,7 +39,7 @@ if __name__ == "__main__":
         choices=llm_reconstruction_free.MODELS,
         default="apple/OpenELM-450M",
     )
-    parser.add_argument("--freeze", action="store_true")
+    parser.add_argument("--freeze", type=lambda x:True if x=="1" else False)
     parser.add_argument("--lora-rank", type=int, default=0)
     parser.add_argument(
         "--dataset",
@@ -49,7 +49,7 @@ if __name__ == "__main__":
     parser.add_argument("--training-steps", type=int, default=200)
     parser.add_argument("--per-device-batch-size", type=int, default=8)
     parser.add_argument("--batch-size", type=int, default=64)
-    parser.add_argument("--pretrained", action="store_true")
+    parser.add_argument("--pretrained", type=lambda x:True if x=="1" else False)
     parser.add_argument("--weight-decay", type=float, default=1e-5)
     parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument("--dropout", type=float, default=0)
@@ -57,7 +57,7 @@ if __name__ == "__main__":
     parser.add_argument("--vocab-size", type=int, default=None)
     parser.add_argument("--max-length", type=int, default=1024)
     parser.add_argument("--label-smoothing", type=float, default=0)
-    parser.add_argument("--from-gcs", type=str, default=None)
+    parser.add_argument("--from-gcs", type=lambda x:True if x!="0" else False)
     parser.add_argument("--eval-steps", type=int, default=20)
     args = parser.parse_args()
 
