@@ -2,7 +2,7 @@ training_steps=600
 per_device_batch_size=1
 
 # pretrained model that will fully fine-tune
-torchrun --nproc-per-node 8 supervised_finetuning.py --freeze --dataset rotten_tomatoes --pretrained --training-steps $training_steps --per-device-batch-size $per_device_batch_size --backbone mistralai/Mistral-7B-v0.1 --max-length 256
+torchrun --nproc-per-node 8 supervised_finetuning.py --freeze --dataset rotten_tomatoes --pretrained --training-steps $training_steps --per-device-batch-size $per_device_batch_size --backbone meta-llama/Meta-Llama-3-8B --max-length 256
 
 # pretrained model that is frozen and fine-tuned with LORA
 #torchrun --nproc-per-node 8 supervised_finetuning.py --dataset rotten_tomatoes --pretrained --training-steps $training_steps --per-device-batch-size $per_device_batch_size --lora-rank 4

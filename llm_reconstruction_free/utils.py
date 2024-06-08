@@ -298,7 +298,7 @@ def get_model(
         out_features = num_classes
     else:
         out_features = backbone_config.vocab_size
-    if "mistral" in name:
+    if "mistral" or "llama" in name:
         in_features = backbone_config.hidden_size
     elif "apple" in name:
         in_features = backbone_config.model_dim
@@ -308,6 +308,8 @@ def get_model(
         in_features = backbone_config.n_embd
     elif "arctic" in name:
         in_features = backbone_config.hidden_size
+    else:
+        raise NotImplementedError()
 
     config = CustomConfig(
         backbone_config=backbone_config,

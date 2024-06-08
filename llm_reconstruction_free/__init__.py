@@ -7,6 +7,7 @@ MODELS = [
     #    "meta-llama/Llama-3-8B",
     "microsoft/phi-2",
     #    "openai-community/gpt2",
+    "meta-llama/Meta-Llama-3-8B",
     "Snowflake/snowflake-arctic-embed-xs",
     "Snowflake/snowflake-arctic-embed-s",
     "Snowflake/snowflake-arctic-embed-m",
