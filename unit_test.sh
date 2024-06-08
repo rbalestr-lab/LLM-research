@@ -35,19 +35,6 @@ function run_suite() {
   run_one ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps} "0" "" "4000" ""
 }
 
-<<<<<<< HEAD
-# pretrained model that will fully fine-tune
-torchrun --nproc-per-node 8 supervised_finetuning.py --freeze --dataset rotten_tomatoes --pretrained --training-steps $training_steps --per-device-batch-size $per_device_batch_size --backbone meta-llama/Meta-Llama-3-8B --max-length 256
-=======
-# Smoke tests to run all the datasets, all the backbones, and run_suite() once.
-training_steps=20
-per_device_batch_size=1
-backbone=apple/OpenELM-270M
-dataset=rotten_tomatoes
-from_gcs=gs://haih-e1ff76673758
-eval_steps=20
->>>>>>> 7dfd9571edb87e44522261dfa63c4289fac102fb
-
 for dataset in "rotten_tomatoes" "sst2" "yelp_review_full" "imdb" "wiki_toxic" \
   "toxigen" "bias_in_bios" "polarity" "emotion" "snli" "medical"
 do
