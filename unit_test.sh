@@ -33,18 +33,21 @@ function run_suite() {
 #  run_one ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps} "0" "" "0" "--pretrained"
 #  run_one ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps} "4" "" "0" "--pretrained"
 #  run_one ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps} "32" "" "0" "--pretrained"
-  run_one ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps} "0" "1" "0" "--pretrained"
-#  run_one ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps} "0" "" "4000" ""
+#  run_one ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps} "0" "1" "0" "--pretrained"
+  run_one ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps} "0" "1" "0" "1"
 }
 
 training_steps=10
 per_device_batch_size=1
-backbone="Snowflake/snowflake-arctic-embed-xs"
-from_gcs="0"
+from_gcs="none"
 eval_steps=20
-dataset=rotten_tomatoes
+dataset=sst2
 
-run_suite ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps}
+for backbone in "apple/OpenELM-270M" \
+  "Snowflake/snowflake-arctic-embed-xs" 
+do
+	run_suite ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps}
+done
 
 #for dataset in "rotten_tomatoes" "sst2" "yelp_review_full" "imdb" "wiki_toxic" \
 #  "toxigen" "bias_in_bios" "polarity" "emotion" "snli" "medical"

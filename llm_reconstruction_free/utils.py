@@ -106,23 +106,26 @@ class CustomBackboneHead(transformers.PreTrainedModel):
                     model = transformers.AutoModelForCausalLM.from_pretrained(
                         config.local_cache, trust_remote_code=True,
                         torch_dtype=config.torch_dtype,
+                        config=config.backbone_config, ignore_mismatched_sizes=True
                     )
                     model = model.transformer
                 else:
                     model = transformers.AutoModel.from_pretrained(
                         config.local_cache, trust_remote_code=True,
                         torch_dtype=config.torch_dtype,
+                        config=config.backbone_config, ignore_mismatched_sizes=True
+
                     )
             else:
                 print("Loading from HuggingFace...")
                 if "apple" in config.backbone_name:
                     model = transformers.AutoModelForCausalLM.from_pretrained(
-                        config.backbone_name, trust_remote_code=True, torch_dtype=config.torch_dtype
+                        config.backbone_name, trust_remote_code=True, torch_dtype=config.torch_dtype, config=config.backbone_config, ignore_mismatched_sizes=True
                     )
                     model = model.transformer
                 else:
                     model = transformers.AutoModel.from_pretrained(
-                        config.backbone_name, trust_remote_code=True, torch_dtype=config.torch_dtype
+                        config.backbone_name, trust_remote_code=True, torch_dtype=config.torch_dtype, config=config.backbone_config, ignore_mismatched_sizes=True
                     )
         elif config.backbone_pretrained:
             model = transformers.AutoModel.from_pretrained(config.backbone_pretrained, torch_dtype=config.torch_dtype)
@@ -298,7 +301,7 @@ def get_model(
         out_features = num_classes
     else:
         out_features = backbone_config.vocab_size
-    if "mistral" or "llama" in name:
+    if "mistral" in name or "llama" in name:
         in_features = backbone_config.hidden_size
     elif "apple" in name:
         in_features = backbone_config.model_dim
