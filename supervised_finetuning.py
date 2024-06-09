@@ -57,20 +57,21 @@ if __name__ == "__main__":
     parser.add_argument("--vocab-size", type=int, default=None)
     parser.add_argument("--max-length", type=int, default=1024)
     parser.add_argument("--label-smoothing", type=float, default=0)
-    parser.add_argument("--from-gcs", type=lambda x:True if x!="0" else False)
+    parser.add_argument("--from-gcs", type=str, default="none")
     parser.add_argument("--eval-steps", type=int, default=20)
     args = parser.parse_args()
 
     if not args.pretrained:
         assert args.vocab_size is not None
 
+    from_gcs = None if args.from_gcs == "none" else args.from_gcs
     data = llm_reconstruction_free.data.from_name(
-            args.dataset, from_gcs=args.from_gcs)
+            args.dataset, from_gcs=from_gcs)
     train_dataset, test_dataset = data["train"], data["test"]
 
     if args.pretrained:
         tokenizer = llm_reconstruction_free.tokenizer.from_model(
-                args.backbone, from_gcs=args.from_gcs)
+                args.backbone, from_gcs=from_gcs)
     else:
         tokenizer = llm_reconstruction_free.tokenizer.from_data(train_dataset, variant="BPE", vocab_size=args.vocab_size)
 
@@ -88,7 +89,7 @@ if __name__ == "__main__":
         label_smoothing=args.label_smoothing,
         torch_dtype=torch.float32 if "mistralai" not in args.backbone else "auto",
         max_length=args.max_length,
-        from_gcs=args.from_gcs,
+        from_gcs=from_gcs,
     )
 
     if args.lora_rank:
