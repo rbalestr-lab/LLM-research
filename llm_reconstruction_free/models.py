@@ -12,7 +12,7 @@ from llm_reconstruction_free import MODELS
 from . import gcs
 
 
-def from_name(name, pretrained, tokenizer=None, local_cache=None, max_length=None):
+def from_name(name, pretrained, tokenizer=None, local_cache=None, max_length=None, task=None):
 
     if name not in MODELS:
         raise ValueError(f"`{name}` must be in {MODELS}")
@@ -48,6 +48,9 @@ def from_name(name, pretrained, tokenizer=None, local_cache=None, max_length=Non
     else:
         model = transformers.AutoModelForCausalLM.from_config(config=config)
 
+    if task == "lm":
+        return model
+
     if "OpenELM" in name:
         model = model.transformer
     else:
@@ -55,7 +58,7 @@ def from_name(name, pretrained, tokenizer=None, local_cache=None, max_length=Non
     return model
 
 
-def from_config(config, pretrained, local_cache=None):
+def from_config(config, pretrained, local_cache=None, task=None):
 
     if config._name_or_path not in MODELS:
         raise ValueError(f"`{config._name_or_path}` must be in {MODELS}")
@@ -73,6 +76,9 @@ def from_config(config, pretrained, local_cache=None):
         )
     else:
         model = transformers.AutoModelForCausalLM.from_config(config=config, trust_remote_code=True)
+
+    if task == "lm":
+        return model
 
     if "OpenELM" in config._name_or_path:
         model = model.transformer
