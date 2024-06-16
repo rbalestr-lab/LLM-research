@@ -154,13 +154,15 @@ def from_model(name, from_gcs: str = None):
     if from_gcs:
         local_cache = gcs.local_copy(from_gcs, "tokenizers", name)
         tokenizer = transformers.AutoTokenizer.from_pretrained(
-                local_cache, trust_remote_code=True)
+            local_cache, trust_remote_code=True
+        )
     else:
         tokenizer = transformers.AutoTokenizer.from_pretrained(
-                name, trust_remote_code=True)
+            name, trust_remote_code=True
+        )
 
     if tokenizer.eos_token is None:
-        tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+        tokenizer.add_special_tokens({"pad_token": "[PAD]"})
     else:
         tokenizer.pad_token = tokenizer.eos_token
     return tokenizer

@@ -1,5 +1,6 @@
 # Byte-compiled / optimized / DLL files
 *.pdf
+*.safetensors
 wandb/
 __pycache__/
 *.py[cod]

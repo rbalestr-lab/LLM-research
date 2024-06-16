@@ -1,5 +1,5 @@
 import transformers
-from llm_reconstruction_free import modeling_openelm, MODELS
+from llm_reconstruction_free import MODELS, models
 import torch
 from torch import nn
 import inspect
@@ -16,7 +16,9 @@ from . import gcs
 class ClassifierHead(nn.Module):
     def __init__(self, in_features, out_features, dropout):
         super().__init__()
-        norm = torch.nn.Identity()#torch.nn.LayerNorm(in_features * 2, elementwise_affine=False, eps=1e-3)
+        norm = (
+            torch.nn.Identity()
+        )  # torch.nn.LayerNorm(in_features * 2, elementwise_affine=False, eps=1e-3)
         if dropout:
             self.classifier = torch.nn.Sequential(
                 norm, nn.Dropout(dropout), nn.Linear(in_features * 2, out_features)
@@ -97,41 +99,11 @@ class CustomBackboneHead(transformers.PreTrainedModel):
                 config.dropout,
             )
 
-        if "apple" in config.backbone_name and not config.backbone_pretrained:
-            model = modeling_openelm.OpenELMModel(config.backbone_config)
-        elif type(config.backbone_pretrained) == bool and config.backbone_pretrained:
-            if config.local_cache:
-                print("Loading from GCS...")
-                if "apple" in config.backbone_name:
-                    model = transformers.AutoModelForCausalLM.from_pretrained(
-                        config.local_cache, trust_remote_code=True,
-                        torch_dtype=config.torch_dtype,
-                        config=config.backbone_config, ignore_mismatched_sizes=True
-                    )
-                    model = model.transformer
-                else:
-                    model = transformers.AutoModel.from_pretrained(
-                        config.local_cache, trust_remote_code=True,
-                        torch_dtype=config.torch_dtype,
-                        config=config.backbone_config, ignore_mismatched_sizes=True
-
-                    )
-            else:
-                print("Loading from HuggingFace...")
-                if "apple" in config.backbone_name:
-                    model = transformers.AutoModelForCausalLM.from_pretrained(
-                        config.backbone_name, trust_remote_code=True, torch_dtype=config.torch_dtype, config=config.backbone_config, ignore_mismatched_sizes=True
-                    )
-                    model = model.transformer
-                else:
-                    model = transformers.AutoModel.from_pretrained(
-                        config.backbone_name, trust_remote_code=True, torch_dtype=config.torch_dtype, config=config.backbone_config, ignore_mismatched_sizes=True
-                    )
-        elif config.backbone_pretrained:
-            model = transformers.AutoModel.from_pretrained(config.backbone_pretrained, torch_dtype=config.torch_dtype)
-        else:
-            model = transformers.AutoModel.from_config(config.backbone_config, torch_dtype=config.torch_dtype)
-
+        model = models.from_config(
+            config.backbone_config,
+            pretrained=config.backbone_pretrained,
+            local_cache=config.local_cache,
+        )
         if "arctic" in config.backbone_name:
             model.pooler = torch.nn.Identity()
 
@@ -280,22 +252,31 @@ def get_model(
     if from_gcs:
         local_cache = gcs.local_copy(from_gcs, "models", name)
         backbone_config = transformers.AutoConfig.from_pretrained(
-            local_cache, trust_remote_code=True)
+            local_cache, trust_remote_code=True
+        )
     else:
-        backbone_config = transformers.AutoConfig.from_pretrained(name, trust_remote_code=True)
+        backbone_config = transformers.AutoConfig.from_pretrained(
+            name, trust_remote_code=True
+        )
 
     if max_length is not None:
         if "apple" in name:
             backbone_config.rope_max_length = max_length
-        elif "phi" in name or "arctic" in name or "mistral" in name or "llama" in name:
+        elif (
+            "phi" in name
+            or "arctic" in name
+            or "mistral" in name
+            or "llama" in name
+            or "Qwen" in name
+        ):
             backbone_config.max_position_embeddings = max_length
 
-    backbone_config.eos_token_id = tokenizer.eos_token_id 
+    backbone_config.eos_token_id = tokenizer.eos_token_id
     backbone_config.bos_token_id = tokenizer.bos_token_id
+    backbone_config.pad_token_id = tokenizer.pad_token_id
     backbone_config.vocab_size = len(tokenizer.vocab)
 
     print(backbone_config)
-
 
     if task == "ft":
         out_features = num_classes

@@ -6,13 +6,13 @@ from datasets import (
     load_from_disk,
     concatenate_datasets,
     Features,
-    Value
+    Value,
 )
 
 from . import gcs
 
 NAMES = [
-#    "civil_comments",
+    #    "civil_comments",
     "rotten_tomatoes",
     "sst2",
     "yelp_review_full",
@@ -23,7 +23,7 @@ NAMES = [
     "polarity",
     "emotion",
     "snli",
-    "medical"
+    "medical",
 ]
 
 
@@ -78,22 +78,26 @@ def from_name(name: str, from_gcs: str = None):
         elif name == "fancyzhx/amazon_polarity":
             data[split] = data[split].rename_column("content", "text")
         elif name == "stanfordnlp/snli":
+
             def preprocess(example):
                 for i, v in enumerate(example["hypothesis"]):
                     example["premise"][i] += " " + v
                     return example
+
             data[split] = data[split].map(preprocess, batched=True)
             data[split] = data[split].rename_column("premise", "text")
         elif name == "stanfordnlp/sst2":
             data[split] = data[split].rename_column("sentence", "text")
         elif name == "medical_questions_pairs":
+
             def preprocess(example):
                 for i, v in enumerate(example["question_2"]):
                     example["question_1"][i] += " " + v
                     return example
+
             data[split] = data[split].map(preprocess, batched=True)
             data[split] = data[split].rename_column("question_1", "text")
-        data[split] = data[split].filter(lambda row:row["labels"]>=0)
+        data[split] = data[split].filter(lambda row: row["labels"] >= 0)
         assert "text" in data[split].column_names
         print(f"\t-{split}: {data[split].shape}")
     if name == "stanfordnlp/sst2":

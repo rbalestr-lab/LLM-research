@@ -25,7 +25,7 @@ def local_copy(from_gcs: str, infix: str, name: str) -> str:
       from_gcs: GCS path in the format of "gs://<bucket>".
       infix: infix. Suggested values are "models", "datasets", "tokenizers".
       name: name. Suggested values are "microsoft/phi-2", etc.
-    
+
     Returns:
       Local file path.
     """
@@ -41,18 +41,40 @@ def local_copy(from_gcs: str, infix: str, name: str) -> str:
             remove_local_cache = False
         if remove_local_cache:
             subprocess.run(["rm", "-rf", local_cache], check=True)
-        print("MKDIR:" + subprocess.run(
-            ["mkdir", "-p", local_cache], stderr=subprocess.STDOUT,
-            stdout=subprocess.PIPE, check=True).stdout.decode("utf-8"))
-        print("GSUTIL:" + subprocess.run(
-            ["gsutil", "-m", "cp", "-r",
-            os.path.join(from_gcs, infix, name, "*"), local_cache],
-            stderr=subprocess.STDOUT,
-            stdout=subprocess.PIPE, check=True).stdout.decode("utf-8"))
-        print("LS:" + subprocess.run(
-            ["ls", "-l", local_cache],
-            stderr=subprocess.STDOUT,
-            stdout=subprocess.PIPE, check=True).stdout.decode("utf-8"))
+        print(
+            "MKDIR:"
+            + subprocess.run(
+                ["mkdir", "-p", local_cache],
+                stderr=subprocess.STDOUT,
+                stdout=subprocess.PIPE,
+                check=True,
+            ).stdout.decode("utf-8")
+        )
+        print(
+            "GSUTIL:"
+            + subprocess.run(
+                [
+                    "gsutil",
+                    "-m",
+                    "cp",
+                    "-r",
+                    os.path.join(from_gcs, infix, name, "*"),
+                    local_cache,
+                ],
+                stderr=subprocess.STDOUT,
+                stdout=subprocess.PIPE,
+                check=True,
+            ).stdout.decode("utf-8")
+        )
+        print(
+            "LS:"
+            + subprocess.run(
+                ["ls", "-l", local_cache],
+                stderr=subprocess.STDOUT,
+                stdout=subprocess.PIPE,
+                check=True,
+            ).stdout.decode("utf-8")
+        )
         print(f"Finished copying {infix} from GCS...")
     torch.distributed.barrier()
     return local_cache

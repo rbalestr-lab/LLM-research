@@ -10,17 +10,11 @@ function run_one() {
   vocab_size=${9}
   pretrained=${10}
   echo ${0} ${1} ${2} ${3} ${4} ${5} ${6} ${7}
-  asdf
   torchrun --nproc-per-node 8 supervised_finetuning.py --dataset $dataset \
     --pretrained=$pretrained --training-steps $training_steps \
     --per-device-batch-size $per_device_batch_size --backbone $backbone \
-    --from-gcs=$from_gcs --lora-rank=$lora_rank --freeze=$freeze \
+    --lora-rank=$lora_rank --freeze=$freeze \
     --vocab-size=$vocab_size --eval-steps=$eval_steps
-  if [[ "1" != "${from_gcs}" ]]
-  then
-    gsutil -m cp -r /workdir/xcloud/wandb/* ${from_gcs}/wandb
-    rm -rf /workdir/xcloud/wandb/*
-  fi
 }
 
 function run_suite() {
@@ -34,21 +28,25 @@ function run_suite() {
 #  run_one ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps} "4" "" "0" "--pretrained"
 #  run_one ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps} "32" "" "0" "--pretrained"
 #  run_one ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps} "0" "1" "0" "--pretrained"
-  run_one ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps} "0" "1" "0" "1"
+#  run_one ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps} "0" "0" "2000" "0"
+  run_one ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps} "0" "0" "4000" "0"
+#  run_one ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps} "0" "0" "8000" "0"
+  run_one ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps} "0" "0" "32000" "0"
 }
 
-training_steps=10
 per_device_batch_size=1
 from_gcs="none"
-eval_steps=20
+eval_steps=50
 dataset=sst2
 
-for backbone in "apple/OpenELM-270M" \
-  "Snowflake/snowflake-arctic-embed-xs" 
+for training_steps in 2000 20000 60000
 do
-	run_suite ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps}
+	for backbone in "apple/OpenELM-270M" \
+	  "Snowflake/snowflake-arctic-embed-xs" 
+	do
+		run_suite ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps}
+	done
 done
-
 #for dataset in "rotten_tomatoes" "sst2" "yelp_review_full" "imdb" "wiki_toxic" \
 #  "toxigen" "bias_in_bios" "polarity" "emotion" "snli" "medical"
 #do

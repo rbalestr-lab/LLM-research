@@ -39,7 +39,7 @@ if __name__ == "__main__":
         choices=llm_reconstruction_free.MODELS,
         default="apple/OpenELM-450M",
     )
-    parser.add_argument("--freeze", type=lambda x:True if x=="1" else False)
+    parser.add_argument("--freeze", type=lambda x: True if x == "1" else False)
     parser.add_argument("--lora-rank", type=int, default=0)
     parser.add_argument(
         "--dataset",
@@ -49,7 +49,7 @@ if __name__ == "__main__":
     parser.add_argument("--training-steps", type=int, default=200)
     parser.add_argument("--per-device-batch-size", type=int, default=8)
     parser.add_argument("--batch-size", type=int, default=64)
-    parser.add_argument("--pretrained", type=lambda x:True if x=="1" else False)
+    parser.add_argument("--pretrained", type=lambda x: True if x == "1" else False)
     parser.add_argument("--weight-decay", type=float, default=1e-5)
     parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument("--dropout", type=float, default=0)
@@ -65,15 +65,17 @@ if __name__ == "__main__":
         assert args.vocab_size is not None
 
     from_gcs = None if args.from_gcs == "none" else args.from_gcs
-    data = llm_reconstruction_free.data.from_name(
-            args.dataset, from_gcs=from_gcs)
+    data = llm_reconstruction_free.data.from_name(args.dataset, from_gcs=from_gcs)
     train_dataset, test_dataset = data["train"], data["test"]
 
     if args.pretrained:
         tokenizer = llm_reconstruction_free.tokenizer.from_model(
-                args.backbone, from_gcs=from_gcs)
+            args.backbone, from_gcs=from_gcs
+        )
     else:
-        tokenizer = llm_reconstruction_free.tokenizer.from_data(train_dataset, variant="BPE", vocab_size=args.vocab_size)
+        tokenizer = llm_reconstruction_free.tokenizer.from_data(
+            train_dataset, variant="BPE", vocab_size=args.vocab_size
+        )
 
     print(f"Tokenizer vocab_size: {len(tokenizer.vocab)}")
 
@@ -109,10 +111,12 @@ if __name__ == "__main__":
     else:
         model.requires_grad_(True)
 
-
     train_dataset = train_dataset.map(
         lambda examples: tokenizer(
-            examples["text"], truncation=True, padding="max_length", max_length=args.max_length
+            examples["text"],
+            truncation=True,
+            padding="max_length",
+            max_length=args.max_length,
         ),
         batched=True,
     )
@@ -122,14 +126,17 @@ if __name__ == "__main__":
 
     test_dataset = test_dataset.map(
         lambda examples: tokenizer(
-            examples["text"], truncation=True, padding="max_length", max_length=args.max_length
+            examples["text"],
+            truncation=True,
+            padding="max_length",
+            max_length=args.max_length,
         ),
         batched=True,
     )
     test_dataset.set_format(
         type="torch", columns=["input_ids", "attention_mask", "labels"]
     )
-    
+
     params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.AdamW(
         params, weight_decay=args.weight_decay, lr=args.learning_rate
@@ -149,7 +156,7 @@ if __name__ == "__main__":
         max_grad_norm=1,
         logging_steps=5,
         logging_dir=f"~/supervised_finetuning/{args.dataset}/{args.backbone}/logs",
-#        save_steps=100,
+        #        save_steps=100,
         eval_accumulation_steps=1,
         eval_strategy="steps",
         eval_steps=args.eval_steps,
@@ -159,7 +166,7 @@ if __name__ == "__main__":
         overwrite_output_dir="True",
         save_strategy="no",
         load_best_model_at_end=False,
-        fp16=True if "mistralai" not in args.backbone else False
+        fp16=True if "mistralai" not in args.backbone else False,
     )
 
     model.config.use_cache = False

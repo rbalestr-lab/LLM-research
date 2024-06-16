@@ -11,7 +11,14 @@ MODELS = [
     "Snowflake/snowflake-arctic-embed-s",
     "Snowflake/snowflake-arctic-embed-m",
     "Snowflake/snowflake-arctic-embed-l",
+    "Qwen/Qwen2-0.5B",
+    "Qwen/Qwen2-1.5B",
+    "Qwen/Qwen2-7B",
     "mistralai/Mistral-7B-v0.1",
+    "mistralai/Mistral-7B-v0.2",
+    "mistralai/Mistral-7B-v0.3",
+    "google/gemma-2b",
+    "google/gemma-7b",
 ]
 
 
@@ -19,7 +26,7 @@ from . import mistral
 from . import bert
 from . import data
 from . import openelm
-from .OpenELM_450M import modeling_openelm
 from . import utils
 from . import tokenizer
+from . import models
 import transformers
