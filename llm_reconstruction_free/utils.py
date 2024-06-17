@@ -292,6 +292,10 @@ def get_model(
         in_features = backbone_config.n_embd
     elif "arctic" in name:
         in_features = backbone_config.hidden_size
+    elif "Qwen2" in name:
+        in_features = backbone_config.hidden_size
+    elif "google/gemma" in name:
+        in_features = backbone_config.hidden_size
     else:
         raise NotImplementedError()
 

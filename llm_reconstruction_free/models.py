@@ -46,13 +46,15 @@ def from_name(name, pretrained, tokenizer=None, local_cache=None, max_length=Non
             ignore_mismatched_sizes=True,
         )
     else:
-        model = transformers.AutoModelForCausalLM.from_config(config=config)
+        model = transformers.AutoModelForCausalLM.from_config(config=config, trust_remote_code=True)
 
     if task == "lm":
         return model
 
     if "OpenELM" in name:
         model = model.transformer
+    elif "snowflake-arctic" in config._name_or_path:
+        model = model.bert
     else:
         model = model.model
     return model
@@ -82,6 +84,8 @@ def from_config(config, pretrained, local_cache=None, task=None):
 
     if "OpenELM" in config._name_or_path:
         model = model.transformer
+    elif "snowflake-arctic" in config._name_or_path:
+        model = model.bert
     else:
         model = model.model
     return model

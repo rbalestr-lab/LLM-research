@@ -41,8 +41,7 @@ dataset=sst2
 
 for training_steps in 2000 20000 60000
 do
-	for backbone in "apple/OpenELM-270M" \
-	  "Snowflake/snowflake-arctic-embed-xs" 
+	for backbone in "Snowflake/snowflake-arctic-embed-xs" 
 	do
 		run_suite ${training_steps} ${per_device_batch_size} ${backbone} ${dataset} ${from_gcs} ${eval_steps}
 	done
