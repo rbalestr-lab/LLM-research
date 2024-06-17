@@ -101,6 +101,7 @@ class CustomBackboneHead(transformers.PreTrainedModel):
 
         model = models.from_config(
             config.backbone_config,
+            name=config.backbone_name,
             pretrained=config.backbone_pretrained,
             local_cache=config.local_cache,
         )
