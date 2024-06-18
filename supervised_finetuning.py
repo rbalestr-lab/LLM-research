@@ -31,6 +31,14 @@ import bitsandbytes
 from sklearn import metrics
 import numpy as np
 
+LARGE_MODELS = [
+    "meta-llama/Meta-Llama-3-8B",
+    "Qwen/Qwen2-7B",
+    "mistralai/Mistral-7B-v0.1",
+    "mistralai/Mistral-7B-v0.3",
+    "google/gemma-7b"
+    ]
+
 
 if __name__ == "__main__":
     parser = ArgumentParser()
@@ -89,7 +97,7 @@ if __name__ == "__main__":
         dropout=args.dropout,
         mixup=args.mixup,
         label_smoothing=args.label_smoothing,
-        torch_dtype=torch.float32 if "mistralai" not in args.backbone else "auto",
+        torch_dtype=torch.float32 if args.backbone not in LARGE_MODELS else "auto",
         max_length=args.max_length,
         from_gcs=from_gcs,
     )
@@ -166,7 +174,7 @@ if __name__ == "__main__":
         overwrite_output_dir="True",
         save_strategy="no",
         load_best_model_at_end=False,
-        fp16=True if "mistralai" not in args.backbone else False,
+        fp16=True if args.backbone in LARGE_MODELS else False,
     )
 
     model.config.use_cache = False
