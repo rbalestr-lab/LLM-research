@@ -7,6 +7,7 @@ from datasets import (
     concatenate_datasets,
     Features,
     Value,
+    DatasetDict
 )
 
 from . import gcs
@@ -58,7 +59,7 @@ def from_name(name: str, from_gcs: str = None):
     if from_gcs:
         data = load_from_disk(local_cache)
     else:
-        data = dict()
+        data = DatasetDict()
         for split in splits:
             data[split] = load_dataset(name, split=split)
     for split in splits:
@@ -103,6 +104,8 @@ def from_name(name: str, from_gcs: str = None):
     if name == "stanfordnlp/sst2":
         data["test"] = data["validation"]
         del data["validation"]
+    elif name == "medical_questions_pairs":
+        data = data["train"].train_test_split(test_size=0.3)
     print("\t-columns:", data[split].column_names)
     return data
 
