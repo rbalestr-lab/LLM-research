@@ -46,7 +46,7 @@ class CustomConfig(transformers.PretrainedConfig):
         mixup=0,
         dropout=0,
         label_smoothing=0,
-        torch_dtype=torch.float16,
+        dtype=torch.float16,
         local_cache=None,
         **kwargs,
     ):
@@ -60,7 +60,7 @@ class CustomConfig(transformers.PretrainedConfig):
         self.dropout = dropout
         self.mixup = mixup
         self.label_smoothing = label_smoothing
-        self.torch_dtype = torch_dtype
+        self.dtype = str(dtype)
         self.local_cache = local_cache
         super().__init__(**kwargs)
 
@@ -86,30 +86,30 @@ class CustomBackboneHead(transformers.PreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-
         if config.task == "lm":
             self.head = nn.Linear(
                 config.in_features, 1, config.out_features, bias=False
-            )
+            ).to(eval(config.dtype))
         else:
             self.config.tie_word_embeddings = False
             self.head = ClassifierHead(
                 config.in_features,
                 config.out_features,
                 config.dropout,
-            )
+            ).to(eval(config.dtype))
 
         model = models.from_config(
             config.backbone_config,
             name=config.backbone_name,
             pretrained=config.backbone_pretrained,
             local_cache=config.local_cache,
+            torch_dtype=eval(config.dtype)
         )
+
         if "arctic" in config.backbone_name:
             model.pooler = torch.nn.Identity()
 
         self.backbone = model
-
         self.post_init()
 
     def get_input_embeddings(self):
@@ -277,8 +277,6 @@ def get_model(
     backbone_config.pad_token_id = tokenizer.pad_token_id
     backbone_config.vocab_size = len(tokenizer.vocab)
 
-    print(backbone_config)
-
     if task == "ft":
         out_features = num_classes
     else:
@@ -310,7 +308,7 @@ def get_model(
         mixup=mixup,
         dropout=dropout,
         label_smoothing=label_smoothing,
-        torch_dtype=torch_dtype,
+        dtype=torch_dtype,
         local_cache=local_cache,
     )
     model = CustomBackboneHead(config)

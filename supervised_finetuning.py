@@ -36,7 +36,7 @@ LARGE_MODELS = [
     "Qwen/Qwen2-7B",
     "mistralai/Mistral-7B-v0.1",
     "mistralai/Mistral-7B-v0.3",
-    "google/gemma-7b"
+    "google/gemma-7b",
     ]
 
 
@@ -97,7 +97,7 @@ if __name__ == "__main__":
         dropout=args.dropout,
         mixup=args.mixup,
         label_smoothing=args.label_smoothing,
-        torch_dtype=torch.float32 if args.backbone not in LARGE_MODELS else "auto",
+        torch_dtype=torch.float32 if args.backbone not in LARGE_MODELS else torch.bfloat16,
         max_length=args.max_length,
         from_gcs=from_gcs,
     )
@@ -118,6 +118,8 @@ if __name__ == "__main__":
         model.backbone.requires_grad_(False)
     else:
         model.requires_grad_(True)
+
+
 
     train_dataset = train_dataset.map(
         lambda examples: tokenizer(
@@ -174,7 +176,7 @@ if __name__ == "__main__":
         overwrite_output_dir="True",
         save_strategy="no",
         load_best_model_at_end=False,
-        fp16=True if args.backbone in LARGE_MODELS else False,
+        fp16=False,
     )
 
     model.config.use_cache = False
@@ -207,6 +209,7 @@ if __name__ == "__main__":
     print(f"\t-total parameters: {total}")
     print(f"\t-learnable parameters: {learnable}")
     print(f"\t-trainable parameters (HF): {trainer.get_num_trainable_parameters()}")
+    print(f"\t-dtype={model.dtype}")
 
     args.total_parameters = total
     args.training_parameters = learnable

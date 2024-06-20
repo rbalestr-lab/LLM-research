@@ -12,7 +12,7 @@ from llm_reconstruction_free import MODELS
 from . import gcs
 
 
-def from_name(name, pretrained, tokenizer=None, local_cache=None, max_length=None, task=None):
+def from_name(name, pretrained, tokenizer=None, local_cache=None, max_length=None, task=None, **kwargs):
 
     if name not in MODELS:
         raise ValueError(f"`{name}` must be in {MODELS}")
@@ -21,6 +21,9 @@ def from_name(name, pretrained, tokenizer=None, local_cache=None, max_length=Non
         local_cache or name,
         trust_remote_code=True,
     )
+
+    for k, v in kwargs.items():
+        config.__setattr__(k, v)
 
     if max_length is not None:
         if "apple" in name:
@@ -56,11 +59,17 @@ def from_name(name, pretrained, tokenizer=None, local_cache=None, max_length=Non
     return model
 
 
-def from_config(config, name, pretrained, local_cache=None, task=None):
+def from_config(config, name, pretrained, local_cache=None, task=None, **kwargs):
 
     if name not in MODELS:
         raise ValueError(f"`{name}` must be in {MODELS}")
+    
+    print(config)
+    manual_dtype = "torch_dtype" in kwargs
 
+    for k, v in kwargs.items():
+        config.__setattr__(k, v)
+    print(config)
     if pretrained:
         model = transformers.AutoModelForCausalLM.from_pretrained(
             local_cache or name,
@@ -71,6 +80,10 @@ def from_config(config, name, pretrained, local_cache=None, task=None):
     else:
         model = transformers.AutoModelForCausalLM.from_config(config=config, trust_remote_code=True)
 
+    if manual_dtype:
+        model = model.to(kwargs["torch_dtype"])
+        print("'torch_dtype' wasn't in the config of the model, converting manually")
+
     if task == "lm":
         return model
 
@@ -80,4 +93,6 @@ def from_config(config, name, pretrained, local_cache=None, task=None):
         model = model.bert
     else:
         model = model.model
+
+
     return model

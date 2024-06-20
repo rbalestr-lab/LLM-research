@@ -22,6 +22,8 @@ for run in runs:
     try:
         if "L4" in run.metadata["gpu_devices"][0]["name"]:
             continue
+        if pd.to_datetime(run.metadata["startedAt"]) < pd.to_datetime("06/17/2024"):
+            break
         data = []
         for row in run.scan_history():
             data.append(
@@ -138,6 +140,7 @@ df = pd.pivot_table(
     columns=["init", "finetuning"],
     aggfunc="mean",
 )
+print(df)
 df = df.loc[
     (
         slice(None),
