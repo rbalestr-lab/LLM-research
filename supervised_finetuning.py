@@ -157,12 +157,15 @@ if __name__ == "__main__":
         num_training_steps=args.training_steps,
     )
 
+    assert args.batch_size >= (8 * args.per_device_batch_size)
+    n_accumulation = args.batch_size // (8 * args.per_device_batch_size)
+
     training_args = TrainingArguments(
         output_dir=f"~/supervised_finetuning/{args.dataset}/{args.backbone}/outputs",
         per_device_train_batch_size=args.per_device_batch_size,
         per_device_eval_batch_size=args.per_device_batch_size,
-        gradient_accumulation_steps=args.batch_size // (8 * args.per_device_batch_size),
-        max_steps=args.training_steps,
+        gradient_accumulation_steps=n_accumulation,
+        max_steps=args.training_steps * n_accumulation,
         max_grad_norm=1,
         logging_steps=5,
         logging_dir=f"~/supervised_finetuning/{args.dataset}/{args.backbone}/logs",
