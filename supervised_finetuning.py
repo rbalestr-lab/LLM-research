@@ -157,6 +157,9 @@ if __name__ == "__main__":
         num_training_steps=args.training_steps,
     )
 
+    print("---- OPTIMIZER")
+    print(optimizer)
+
     assert args.batch_size >= (8 * args.per_device_batch_size)
     n_accumulation = args.batch_size // (8 * args.per_device_batch_size)
 

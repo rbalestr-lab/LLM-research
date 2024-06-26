@@ -14,7 +14,7 @@ function run_one() {
     --pretrained=$pretrained --training-steps $training_steps \
     --per-device-batch-size $per_device_batch_size --backbone $backbone \
     --lora-rank=$lora_rank --freeze=$freeze \
-    --vocab-size=$vocab_size --eval-steps=$eval_steps
+    --vocab-size=$vocab_size --eval-steps=$eval_steps --learning-rate 20
 }
 
 function run_suite() {
