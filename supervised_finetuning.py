@@ -18,6 +18,7 @@ from typing import List, Optional, Tuple, Union
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 import llm_reconstruction_free
 import os
+import uuid
 from datasets import (
     load_dataset_builder,
     get_dataset_split_names,
@@ -148,9 +149,23 @@ if __name__ == "__main__":
     )
 
     params = [p for p in model.parameters() if p.requires_grad]
-    optimizer = torch.optim.AdamW(
-        params, weight_decay=args.weight_decay, lr=args.learning_rate
-    )
+#    optimizer = torch.optim.AdamW(
+#        params, weight_decay=args.weight_decay, lr=args.learning_rate
+#    )
+
+    optimizer = transformers.Adafactor(
+    params,
+    lr=args.learning_rate,
+    eps=(1e-30, 1e-3),
+    clip_threshold=1.0,
+    decay_rate=-0.8,
+    beta1=None,
+    weight_decay=args.weight_decay,
+    relative_step=False,
+    scale_parameter=False,
+    warmup_init=False,
+)
+
     scheduler = transformers.get_cosine_schedule_with_warmup(
         optimizer,
         num_warmup_steps=int(0.05 * args.training_steps),
@@ -164,21 +179,21 @@ if __name__ == "__main__":
     n_accumulation = args.batch_size // (8 * args.per_device_batch_size)
 
     training_args = TrainingArguments(
-        output_dir=f"~/supervised_finetuning/{args.dataset}/{args.backbone}/outputs",
+        output_dir=f"~/supervised_finetuning/{uuid.uuid4()}/outputs",
         per_device_train_batch_size=args.per_device_batch_size,
         per_device_eval_batch_size=args.per_device_batch_size,
         gradient_accumulation_steps=n_accumulation,
         max_steps=args.training_steps * n_accumulation,
         max_grad_norm=1,
         logging_steps=5,
-        logging_dir=f"~/supervised_finetuning/{args.dataset}/{args.backbone}/logs",
+        logging_dir=f"~/supervised_finetuning/{uuid.uuid4()}/logs",
         #        save_steps=100,
         eval_accumulation_steps=1,
         eval_strategy="steps",
         eval_steps=args.eval_steps,
         dataloader_num_workers=2,
-        gradient_checkpointing=False,
         report_to="wandb",
+        gradient_checkpointing=False,
         overwrite_output_dir="True",
         save_strategy="no",
         load_best_model_at_end=False,

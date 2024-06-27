@@ -84,11 +84,16 @@ for run in runs:
     else:
         raise RuntimeError()
 
-    all_data[-1]["dataset"] = str(run.config["dataset"]).replace("_", "-")
-    all_data[-1]["backbone"] = str(run.config["backbone"]).replace("_", "-")
-    all_data[-1]["steps"] = str(run.config["max_steps"])
-    all_data[-1]["finetuning"] = ft
-    all_data[-1]["init"] = "pretrained" if run.config["pretrained"] else "random"
+    try:
+        all_data[-1]["dataset"] = str(run.config["dataset"]).replace("_", "-")
+        all_data[-1]["backbone"] = str(run.config["backbone"]).replace("_", "-")
+        all_data[-1]["steps"] = str(run.config["max_steps"])
+        all_data[-1]["finetuning"] = ft
+        all_data[-1]["init"] = "pretrained" if run.config["pretrained"] else "random"
+    except Exception as e:
+        print(e)
+        continue
+
     print(all_data[-1])
 
 
@@ -143,7 +148,7 @@ df = pd.pivot_table(
     values="F1",
     index=["dataset", "backbone"],
     columns=["init", "finetuning", "steps"],
-    aggfunc=lambda x:len(x),
+    aggfunc='max'#lambda x:len(x),
 )
 print(df.loc[:,(slice(None), slice(None), "2000")])
 asdf
