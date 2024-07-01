@@ -166,17 +166,18 @@ if __name__ == "__main__":
     warmup_init=False,
 )
 
+    assert args.batch_size >= (8 * args.per_device_batch_size)
+    n_accumulation = args.batch_size // (8 * args.per_device_batch_size)
+
     scheduler = transformers.get_cosine_schedule_with_warmup(
         optimizer,
         num_warmup_steps=int(0.05 * args.training_steps),
-        num_training_steps=args.training_steps,
+        num_training_steps=args.training_steps*n_accumulation,
     )
 
     print("---- OPTIMIZER")
     print(optimizer)
 
-    assert args.batch_size >= (8 * args.per_device_batch_size)
-    n_accumulation = args.batch_size // (8 * args.per_device_batch_size)
 
     training_args = TrainingArguments(
         output_dir=f"~/supervised_finetuning/{uuid.uuid4()}/outputs",

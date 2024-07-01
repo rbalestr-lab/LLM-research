@@ -52,7 +52,7 @@ for run in runs:
     scatter = timeseries["F1"].dropna().astype(float) * 100
 
     timeseries = (timeseries.fillna(method="ffill") * 100).round(2)
-    all_data.append(timeseries.iloc[-1])
+    all_data.append(timeseries.iloc[timeseries["F1"].argmax()])
     if run.config["lora_rank"]:
         ft = f"LoRA({run.config['lora_rank']})"
     elif run.config["freeze"]:
@@ -150,6 +150,7 @@ df = pd.pivot_table(
     columns=["init", "finetuning", "steps"],
     aggfunc='max'#lambda x:len(x),
 )
+print(df)
 print(df.loc[:,(slice(None), slice(None), "2000")])
 asdf
 df = df.loc[
