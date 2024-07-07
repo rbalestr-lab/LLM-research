@@ -17,6 +17,7 @@ config = LoraConfigExp(
     use_lora0=args.lora0,
     m=args.mixture if args.mixture != 0 else None,
     re_lora=args.re_lora,
+    using_scaling_beta=args.use_scaling_beta,
 )
 print(config)
 model.backbone.requires_grad_(False)
@@ -65,7 +66,11 @@ class LoraConfigExp(LoraConfig):
   )
   re_lora: str = dataclasses.field(
       default='x',
-      metadata={"help": "ReLoRA # of recurrents"}
+      metadata={"help": "ReLoRA type of recurrence"}
+  )
+  use_scaling_beta: bool = dataclasses.field(
+      default=False,
+      metadata={"help": "Learnable scaling beta"}
   )
 
 
@@ -82,15 +87,16 @@ _SUPPORTED_RE_LORA_EXPERIMENTS = [
     "baabba",   # BAA^TB^TBAx, the idea is BA(BAx), but BAx and x may not be in
                 # the same shape. Applying A^TB^T to restore to the shape of the
                 # input.
+    "mask",     # mask out values < a given threshold.
 ]
 
 class LoraLayerExp(LoraLayer):
   """LoraLayer for LoRA Experiment."""
   # All names of layers that may contain (trainable) adapter weights
   # ===== EDIT START =====
-  adapter_layer_names = ("lora_A", "lora_B", "lora_embedding_A", "lora_embedding_B", "lora_A1", "lora_B1", "lora_A2", "lora_B2", "lora_A3", "lora_B3")
+  adapter_layer_names = ("lora_A", "lora_B", "lora_embedding_A", "lora_embedding_B", "lora_A1", "lora_B1", "lora_A2", "lora_B2", "lora_A3", "lora_B3", "scaling_beta")
   # All names of other parameters that may contain adapter-related parameters
-  other_param_names = ("r", "lora_alpha", "scaling", "lora_dropout", "experiment_type", "m", "re_lora")
+  other_param_names = ("r", "lora_alpha", "scaling", "lora_dropout", "experiment_type", "m", "re_lora", "use_scaling_beta")
   # ===== EDIT END =====
 
   def __init__(self, base_layer: nn.Module, **kwargs) -> None:
@@ -103,6 +109,7 @@ class LoraLayerExp(LoraLayer):
     self.m = {}
     self.experiment_type = {}
     self.re_lora = {}
+    self.use_scaling_beta = {}
     # ===== EDIT END =====
     self.lora_alpha = {}
     self.scaling = {}
@@ -118,6 +125,7 @@ class LoraLayerExp(LoraLayer):
     self.lora_B3 = nn.ModuleDict({})
     self.A = {0: self.lora_A, 1: self.lora_A1, 2: self.lora_A2, 3: self.lora_A3}
     self.B = {0: self.lora_B, 1: self.lora_B1, 2: self.lora_B2, 3: self.lora_B3}
+    self.scaling_beta = nn.ParameterDict({})
     # ===== EDIT END =====
     # For Embedding layer
     self.lora_embedding_A = nn.ParameterDict({})
@@ -162,7 +170,8 @@ class LoraLayerExp(LoraLayer):
   def update_layer(
       self, adapter_name, r, lora_alpha, lora_dropout, init_lora_weights, use_rslora, use_dora: bool = False,
       # ===== EDIT START =====
-      m: int | None = None, use_lora0: bool = False, re_lora: str = "x",
+      m: int | None = None, use_lora0: bool = False, re_lora: str | None = None,
+      use_scaling_beta: bool = False,
       # ===== EDIT END =====
   ):
     # ===== EDIT START =====
@@ -187,7 +196,7 @@ class LoraLayerExp(LoraLayer):
     if m is not None and m > 1 and use_lora0:
       raise ValueError(f"`m` is defined but `use_lora0` is also set")
 
-    if re_lora is not None and re_lora != "x" and use_lora0:
+    if re_lora is not None and use_lora0:
       raise ValueError(f"`re_lora` is defined but `use_lora0` is also set")
     # ===== EDIT END =====
 
@@ -205,6 +214,8 @@ class LoraLayerExp(LoraLayer):
     self.lora_dropout.update(nn.ModuleDict({adapter_name: lora_dropout_layer}))
     # Actual trainable parameters
     # ===== EDIT START =====
+    self.use_scaling_beta[adapter_name] = use_scaling_beta
+    self.scaling_beta[adapter_name] = nn.Parameter(torch.tensor(1.0))
     if use_lora0:
       print(f" ********** LoRA0({r}) for layer: {adapter_name} **********")
       self.experiment_type[adapter_name] = LoraExperimentType.LORA0
@@ -216,7 +227,7 @@ class LoraLayerExp(LoraLayer):
       for i in range(m):
         self.A[i][adapter_name] = nn.Linear(self.in_features, r, bias=False)
         self.B[i][adapter_name] = nn.Linear(r, self.out_features, bias=False)
-    elif re_lora is not None and re_lora != "x":
+    elif re_lora is not None:
       print(f" ********** ReLoRA({r}){re_lora} for layer: {adapter_name} **********")
       self.experiment_type[adapter_name] = LoraExperimentType.RE_LORA
       self.lora_A[adapter_name] = nn.Linear(self.in_features, r, bias=False)
@@ -400,6 +411,7 @@ class LinearExp(nn.Module, LoraLayerExp):
         m=kwargs["m"],
         use_lora0=kwargs["use_lora0"],
         re_lora=kwargs["re_lora"],
+        use_scaling_beta=kwargs["use_scaling_beta"],
         # ===== EDIT END =====
     )
     self.is_target_conv_1d_layer = is_target_conv_1d_layer
@@ -561,6 +573,15 @@ class LinearExp(nn.Module, LoraLayerExp):
             continue
 
         # ===== EDIT START =====
+        def apply_scale(active_adapter, x):
+          if self.use_scaling_beta[active_adapter]:
+            beta = self.scaling_beta[active_adapter]
+            if int(torch.randint(1000, (1,))) == 0:
+              print(f" --> apply_scale: {float(beta)}")
+            return (torch.relu(beta) + 1.) * x
+          else:
+            return x
+
         def apply_layers(active_adapter, lora_A, lora_B, dropout, x):
           if self.re_lora[active_adapter] == "x":
             return lora_B(lora_A(dropout(x)))
@@ -574,6 +595,10 @@ class LinearExp(nn.Module, LoraLayerExp):
             z = z @ lora_A.weight
             z = lora_B(lora_A(z))
             return z
+          elif self.re_lora[active_adapter] == "mask":
+            mask = torch.abs(x) > torch.quantile(
+                torch.abs(x), float(self.r[active_adapter]) / self.in_features)
+            return lora_B(lora_A(dropout(x * mask)))
           else:
             raise ValueError(f"Unknown re_lora type: {self.re_lora[active_adapter]}")
 
@@ -594,8 +619,10 @@ class LinearExp(nn.Module, LoraLayerExp):
 
           mixture = torch.stack(mixture_list)
           std = max(torch.max(mixture) / 32., 1e-5)
+          # std = max(torch.max(mixture) / 1., 1e-5)
+          # std = 1.
           lora_result = torch.log(torch.mean(torch.exp(mixture / std), dim=0)) * std
-          result = result + lora_result * scaling
+          result = result + apply_scale(active_adapter, lora_result * scaling)
         elif self.experiment_type[active_adapter] == LoraExperimentType.RE_LORA:
           if self.use_dora[active_adapter]:
             raise ValueError(f"dora is not supported at adapter: {active_adapter} which is of experiment type: {self.experiment_type[active_adapter]}")
@@ -606,7 +633,7 @@ class LinearExp(nn.Module, LoraLayerExp):
           scaling = self.scaling[active_adapter]
 
           lora_result = apply_layers(active_adapter, lora_A, lora_B, dropout, x)
-          result = result + lora_result * scaling
+          result = result + apply_scale(active_adapter, lora_result * scaling)
         elif self.experiment_type[active_adapter] == LoraExperimentType.LORA0:
           if self.use_dora[active_adapter]:
             raise ValueError(f"dora is not supported at adapter: {active_adapter} which is of experiment type: {self.experiment_type[active_adapter]}")
@@ -705,6 +732,7 @@ class LoraModelExp(LoraModel):
         "m": lora_config.m,
         "use_lora0": lora_config.use_lora0,
         "re_lora": lora_config.re_lora,
+        "use_scaling_beta": lora_config.use_scaling_beta,
         "lora_alpha": alpha,
         "lora_dropout": lora_config.lora_dropout,
         "fan_in_fan_out": lora_config.fan_in_fan_out,

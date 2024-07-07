@@ -74,7 +74,8 @@ if __name__ == "__main__":
     parser.add_argument("--eval-steps", type=int, default=20)
     parser.add_argument("--mixture", type=int, default=0)
     parser.add_argument("--lora0", type=int, default=0)
-    parser.add_argument("--re-lora", type=str, default="x")
+    parser.add_argument("--re-lora", type=str, default="none")
+    parser.add_argument("--scaling-beta", type=int, default=0)
     args = parser.parse_args()
 
     if not args.pretrained:
@@ -111,7 +112,7 @@ if __name__ == "__main__":
     )
 
     if args.lora_rank:
-        if args.lora0 != 0 or args.mixture != 0 or args.re_lora != "x":
+        if args.lora0 != 0 or args.mixture != 0 or args.re_lora != "none":
             config = LoraConfigExp(
                 r=args.lora_rank,
                 lora_alpha=args.lora_rank,
@@ -121,7 +122,8 @@ if __name__ == "__main__":
                 task_type="CAUSAL_LM",
                 use_lora0=args.lora0,
                 m=args.mixture if args.mixture != 0 else None,
-                re_lora=args.re_lora,
+                re_lora=args.re_lora if args.re_lora != "none" else None,
+                use_scaling_beta=args.scaling_beta,
             )
             print(config)
             model.backbone.requires_grad_(False)
