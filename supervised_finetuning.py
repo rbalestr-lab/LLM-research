@@ -174,7 +174,12 @@ if __name__ == "__main__":
         type="torch", columns=["input_ids", "attention_mask", "labels"]
     )
 
+    # Force setting the `scaling_beta` to be trainable.
+    for param in model.parameters():
+        if param.shape == torch.Size([1, 1]):
+            param.requires_grad = True
     params = [p for p in model.parameters() if p.requires_grad]
+
     # optimizer = torch.optim.AdamW(
     #     params, weight_decay=args.weight_decay, lr=args.learning_rate
     # )
@@ -268,7 +273,15 @@ if __name__ == "__main__":
             group=f"dataset={args.dataset}-backbone={args.backbone}",
         )
     trainer.train()
-#
+
+    if args.scaling_beta:
+        beta_list = []
+        for param in model.parameters():
+            if param.shape == torch.Size([1, 1]):
+                beta_list.append(float(param))
+        beta_arr = torch.nn.functional.relu(torch.tensor(beta_list)) + 0.001
+        print(f" --> scaling_beta: {torch.mean(0.01 / beta_arr)}")
+
 #    metrics = trainer.evaluate(test_dataset)
 #    print(metrics)
 #

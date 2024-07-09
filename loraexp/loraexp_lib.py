@@ -82,12 +82,13 @@ class LoraExperimentType(Enum):
 
 _SUPPORTED_RE_LORA_EXPERIMENTS = [
     "x",
-    "x^2",      # lora_B(lora_A(x * x * sign(x))))
-    "sqrt(x)",  # lora_B(lora_A(sqrt(x) * sign(x))))
-    "baabba",   # BAA^TB^TBAx, the idea is BA(BAx), but BAx and x may not be in
-                # the same shape. Applying A^TB^T to restore to the shape of the
-                # input.
-    "mask",     # mask out values < a given threshold.
+    "x^2",        # lora_B(lora_A(x * x * sign(x))))
+    "sqrt(x)",    # lora_B(lora_A(sqrt(x) * sign(x))))
+    "baabba",     # BAA^TB^TBAx, the idea is BA(BAx), but BAx and x may not be
+                  # in the same shape. Applying A^TB^T to restore to the shape
+                  # of the input.
+    "mask",       # mask out values < a given threshold.
+    "ba+baabba",  # BAx + x, to simulate residual connection.
 ]
 
 class LoraLayerExp(LoraLayer):
@@ -215,7 +216,9 @@ class LoraLayerExp(LoraLayer):
     # Actual trainable parameters
     # ===== EDIT START =====
     self.use_scaling_beta[adapter_name] = use_scaling_beta
-    self.scaling_beta[adapter_name] = nn.Parameter(torch.tensor(1.0))
+    # (0.002 + 0.001) x 100.0 (later at forward()) is effectively a scaling
+    # factor 3.0 to start with.
+    self.scaling_beta[adapter_name] = nn.Parameter(torch.tensor([[0.002]]))
     if use_lora0:
       print(f" ********** LoRA0({r}) for layer: {adapter_name} **********")
       self.experiment_type[adapter_name] = LoraExperimentType.LORA0
@@ -576,9 +579,8 @@ class LinearExp(nn.Module, LoraLayerExp):
         def apply_scale(active_adapter, x):
           if self.use_scaling_beta[active_adapter]:
             beta = self.scaling_beta[active_adapter]
-            if int(torch.randint(1000, (1,))) == 0:
-              print(f" --> apply_scale: {float(beta)}")
-            return (torch.relu(beta) + 1.) * x
+            # Minium is 1e-3, so the scaling factor is effectively capped at 10.
+            return x / 100. / (nn.functional.relu(beta) + 1e-3)
           else:
             return x
 
@@ -599,6 +601,22 @@ class LinearExp(nn.Module, LoraLayerExp):
             mask = torch.abs(x) > torch.quantile(
                 torch.abs(x), float(self.r[active_adapter]) / self.in_features)
             return lora_B(lora_A(dropout(x * mask)))
+          elif self.re_lora[active_adapter] == "ba+baabba":
+            z1 = lora_B(lora_A(dropout(x)))
+            z2 = z1 @ lora_B.weight @ lora_A.weight
+            z2 = lora_B(lora_A(z2))
+            scaling = torch.norm(z1, dim=(1, 2), p=2) / torch.maximum(
+                torch.norm(z2, dim=(1, 2), p=2),
+                torch.ones(1).to(x.device) * 1e-5
+            )
+            scaling = scaling.reshape(-1, 1, 1)
+            z2 = z2 * scaling
+            return z1 + z2
+            # Uncomment below for the MoS(+Re).
+            # mixture_list = [z1, z2]
+            # mixture = torch.stack(mixture_list)
+            # std = max(torch.max(mixture) / 32., 1e-5)
+            # return torch.log(torch.mean(torch.exp(mixture / std), dim=0)) * std
           else:
             raise ValueError(f"Unknown re_lora type: {self.re_lora[active_adapter]}")
 
@@ -615,10 +633,9 @@ class LinearExp(nn.Module, LoraLayerExp):
             lora_A = self.A[j][active_adapter]
             lora_B = self.B[j][active_adapter]
 
-            mixture_list.append(apply_layers(active_adapter, lora_A, lora_B, dropout, x))
-
           mixture = torch.stack(mixture_list)
           std = max(torch.max(mixture) / 32., 1e-5)
+          # Uncomment below for various std.
           # std = max(torch.max(mixture) / 1., 1e-5)
           # std = 1.
           lora_result = torch.log(torch.mean(torch.exp(mixture / std), dim=0)) * std
@@ -633,6 +650,7 @@ class LinearExp(nn.Module, LoraLayerExp):
           scaling = self.scaling[active_adapter]
 
           lora_result = apply_layers(active_adapter, lora_A, lora_B, dropout, x)
+
           result = result + apply_scale(active_adapter, lora_result * scaling)
         elif self.experiment_type[active_adapter] == LoraExperimentType.LORA0:
           if self.use_dora[active_adapter]:
