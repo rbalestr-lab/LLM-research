@@ -82,13 +82,14 @@ class LoraExperimentType(Enum):
 
 _SUPPORTED_RE_LORA_EXPERIMENTS = [
     "x",
-    "x^2",        # lora_B(lora_A(x * x * sign(x))))
-    "sqrt(x)",    # lora_B(lora_A(sqrt(x) * sign(x))))
-    "baabba",     # BAA^TB^TBAx, the idea is BA(BAx), but BAx and x may not be
-                  # in the same shape. Applying A^TB^T to restore to the shape
-                  # of the input.
-    "mask",       # mask out values < a given threshold.
-    "ba+baabba",  # BAx + x, to simulate residual connection.
+    "x^2",         # lora_B(lora_A(x * x * sign(x))))
+    "sqrt(x)",     # lora_B(lora_A(sqrt(x) * sign(x))))
+    "baabba",      # BAA^TB^TBAx, the idea is BA(BAx), but BAx and x may not be
+                   # in the same shape. Applying A^TB^T to restore to the shape
+                   # of the input.
+    "mask",        # mask out values < a given threshold.
+    "mask-scale",  # boost signal strength of the masked entries.
+    "ba+baabba",   # BAx + x, to simulate residual connection.
 ]
 
 class LoraLayerExp(LoraLayer):
@@ -599,10 +600,17 @@ class LinearExp(nn.Module, LoraLayerExp):
             return z
           elif self.re_lora[active_adapter] == "mask":
             mask = torch.abs(x) > torch.quantile(
-                torch.abs(x), float(self.r[active_adapter]) / self.in_features)
+                torch.abs(x), 1. - float(self.r[active_adapter]) / self.in_features)
             return lora_B(lora_A(dropout(x * mask)))
+          elif self.re_lora[active_adapter] == "mask-scale":
+            mask = torch.abs(x) > torch.quantile(
+                torch.abs(x), 1. - float(self.r[active_adapter]) / self.in_features)
+            # Effectively boost the signal strength above the threshold by 2x.
+            return lora_B(lora_A(dropout(x + x * mask)))
           elif self.re_lora[active_adapter] == "ba+baabba":
             z1 = lora_B(lora_A(dropout(x)))
+            # Uncomment the following for x^2 + ba+baabba.
+            # z1 = lora_B(lora_A(dropout(x * x * torch.sign(x))))
             z2 = z1 @ lora_B.weight @ lora_A.weight
             z2 = lora_B(lora_A(z2))
             scaling = torch.norm(z1, dim=(1, 2), p=2) / torch.maximum(
