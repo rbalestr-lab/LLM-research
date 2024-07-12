@@ -16,7 +16,7 @@ config = LoraConfigExp(
     task_type="CAUSAL_LM",
     use_lora0=args.lora0,
     m=args.mixture if args.mixture != 0 else None,
-    re_lora=args.re_lora,
+    superlinear=args.superlinear,
     using_scaling_beta=args.use_scaling_beta,
 )
 print(config)
@@ -58,15 +58,15 @@ class LoraConfigExp(LoraConfig):
   """LoraConfig for LoRA Experiment."""
   m: int | None = dataclasses.field(
       default=None,
-      metadata={"help": "Mixture of LoRA # of mixtures"}
+      metadata={"help": "Split LoRA # of splits"}
   )
   use_lora0: bool = dataclasses.field(
       default=False,
       metadata={"help": "Single matrix adaption, a.k.a. no LoRA"}
   )
-  re_lora: str = dataclasses.field(
+  superlinear: str = dataclasses.field(
       default='x',
-      metadata={"help": "ReLoRA type of recurrence"}
+      metadata={"help": "Superlinear LoRA type of superlinearity"}
   )
   use_scaling_beta: bool = dataclasses.field(
       default=False,
@@ -77,20 +77,34 @@ class LoraConfigExp(LoraConfig):
 class LoraExperimentType(Enum):
   NO_EXPERIMENT = 1
   LORA0 = 2
-  MIXTURE_OF_LORA = 3
-  RE_LORA = 4
+  SPLIT_LORA = 3
+  SUPERLINEAR_LORA = 4
 
-_SUPPORTED_RE_LORA_EXPERIMENTS = [
+_SUPPORTED_SUPERLINEAR_LORA_EXPERIMENTS = [
     "x",
     "x^2",         # lora_B(lora_A(x * x * sign(x))))
+    "ns-x^2",      # lora_B(lora_A(x * x)))
     "sqrt(x)",     # lora_B(lora_A(sqrt(x) * sign(x))))
+    "ns-sqrt(x)",  # lora_B(lora_A(sqrt(x))))
     "baabba",      # BAA^TB^TBAx, the idea is BA(BAx), but BAx and x may not be
                    # in the same shape. Applying A^TB^T to restore to the shape
                    # of the input.
     "mask",        # mask out values < a given threshold.
     "mask-scale",  # boost signal strength of the masked entries.
     "ba+baabba",   # BAx + x, to simulate residual connection.
+    "ba+baabba(x^2)",
+    "ba+baabba(mask(x))",
+    "ba+baabba(mask-scale(x))",
+    "mos:ba+baabba",
+    "mos:ba+baabba(x^2)",
+    "mos:ba+baabba(mask(x))",
+    "mos:ba+baabba(mask-scale(x))",
+    "noscale:ba+baabba",
+    "noscale:ba+baabba(x^2)",
+    "noscale:ba+baabba(mask(x))",
+    "noscale:ba+baabba(mask-scale(x))",
 ]
+
 
 class LoraLayerExp(LoraLayer):
   """LoraLayer for LoRA Experiment."""
@@ -98,7 +112,7 @@ class LoraLayerExp(LoraLayer):
   # ===== EDIT START =====
   adapter_layer_names = ("lora_A", "lora_B", "lora_embedding_A", "lora_embedding_B", "lora_A1", "lora_B1", "lora_A2", "lora_B2", "lora_A3", "lora_B3", "scaling_beta")
   # All names of other parameters that may contain adapter-related parameters
-  other_param_names = ("r", "lora_alpha", "scaling", "lora_dropout", "experiment_type", "m", "re_lora", "use_scaling_beta")
+  other_param_names = ("r", "lora_alpha", "scaling", "lora_dropout", "experiment_type", "m", "superlinear", "use_scaling_beta")
   # ===== EDIT END =====
 
   def __init__(self, base_layer: nn.Module, **kwargs) -> None:
@@ -110,7 +124,7 @@ class LoraLayerExp(LoraLayer):
     # ===== EDIT START =====
     self.m = {}
     self.experiment_type = {}
-    self.re_lora = {}
+    self.superlinear = {}
     self.use_scaling_beta = {}
     # ===== EDIT END =====
     self.lora_alpha = {}
@@ -172,7 +186,7 @@ class LoraLayerExp(LoraLayer):
   def update_layer(
       self, adapter_name, r, lora_alpha, lora_dropout, init_lora_weights, use_rslora, use_dora: bool = False,
       # ===== EDIT START =====
-      m: int | None = None, use_lora0: bool = False, re_lora: str | None = None,
+      m: int | None = None, use_lora0: bool = False, superlinear: str | None = None,
       use_scaling_beta: bool = False,
       # ===== EDIT END =====
   ):
@@ -192,20 +206,20 @@ class LoraLayerExp(LoraLayer):
     if m is not None and m > 4:
       raise ValueError(f"`m` should be a positive integer value less than 5, but got {m}")
 
-    if re_lora is not None and re_lora not in _SUPPORTED_RE_LORA_EXPERIMENTS:
-      raise ValueError(f"`re_lora` is set but is not supported {re_lora}")
+    if superlinear is not None and superlinear not in _SUPPORTED_SUPERLINEAR_LORA_EXPERIMENTS:
+      raise ValueError(f"`superlinear` is set but is not supported {superlinear}")
 
     if m is not None and m > 1 and use_lora0:
       raise ValueError(f"`m` is defined but `use_lora0` is also set")
 
-    if re_lora is not None and use_lora0:
-      raise ValueError(f"`re_lora` is defined but `use_lora0` is also set")
+    if superlinear is not None and use_lora0:
+      raise ValueError(f"`superlinear` is defined but `use_lora0` is also set")
     # ===== EDIT END =====
 
     self.r[adapter_name] = r
     # ===== EDIT START =====
     self.m[adapter_name] = m
-    self.re_lora[adapter_name] = re_lora
+    self.superlinear[adapter_name] = superlinear
     # ===== EDIT END =====
     self.lora_alpha[adapter_name] = lora_alpha
     if lora_dropout > 0.0:
@@ -226,14 +240,14 @@ class LoraLayerExp(LoraLayer):
       self.lora_A[adapter_name] = nn.Linear(
           self.in_features, self.out_features, bias=False)
     elif m is not None and m > 1:
-      print(f" ********** MoLoRA({r}x{m}){re_lora} for layer: {adapter_name} **********")
-      self.experiment_type[adapter_name] = LoraExperimentType.MIXTURE_OF_LORA
+      print(f" ********** SplitLoRA({r}x{m}){superlinear} for layer: {adapter_name} **********")
+      self.experiment_type[adapter_name] = LoraExperimentType.SPLIT_LORA
       for i in range(m):
         self.A[i][adapter_name] = nn.Linear(self.in_features, r, bias=False)
         self.B[i][adapter_name] = nn.Linear(r, self.out_features, bias=False)
-    elif re_lora is not None:
-      print(f" ********** ReLoRA({r}){re_lora} for layer: {adapter_name} **********")
-      self.experiment_type[adapter_name] = LoraExperimentType.RE_LORA
+    elif superlinear is not None:
+      print(f" ********** SuperlinearLoRA({r}){superlinear} for layer: {adapter_name} **********")
+      self.experiment_type[adapter_name] = LoraExperimentType.SUPERLINEAR_LORA
       self.lora_A[adapter_name] = nn.Linear(self.in_features, r, bias=False)
       self.lora_B[adapter_name] = nn.Linear(r, self.out_features, bias=False)
     else:
@@ -285,7 +299,7 @@ class LoraLayerExp(LoraLayer):
         # initialize A the same way as the default for nn.Linear and B to zero
         # https://github.com/microsoft/LoRA/blob/a0a92e0f26c067cf94747bdbf1ce73793fa44d19/loralib/layers.py#L124
         # ===== EDIT START =====
-        if self.experiment_type[adapter_name] == LoraExperimentType.MIXTURE_OF_LORA:
+        if self.experiment_type[adapter_name] == LoraExperimentType.SPLIT_LORA:
           for i in range(self.m[adapter_name]):
             nn.init.kaiming_uniform_(self.A[i][adapter_name].weight, a=math.sqrt(5))
         else:
@@ -293,7 +307,7 @@ class LoraLayerExp(LoraLayer):
           nn.init.kaiming_uniform_(self.lora_A[adapter_name].weight, a=math.sqrt(5))
       elif init_lora_weights.lower() == "gaussian":
         # ===== EDIT START =====
-        if self.experiment_type[adapter_name] == LoraExperimentType.MIXTURE_OF_LORA:
+        if self.experiment_type[adapter_name] == LoraExperimentType.SPLIT_LORA:
           for i in range(self.m[adapter_name]):
               nn.init.normal_(self.A[i][adapter_name].weight, std=1 / self.r[adapter_name])
         else:
@@ -302,12 +316,12 @@ class LoraLayerExp(LoraLayer):
       else:
         raise ValueError(f"Unknown initialization {init_lora_weights=}")
       # ===== EDIT START =====
-      if self.re_lora[adapter_name] == "baabba":
+      if self.superlinear[adapter_name] == "baabba":
         branches = self.m[adapter_name] if self.m[adapter_name] else 1
         for i in range(branches):
           nn.init.kaiming_uniform_(
               self.B[i][adapter_name].weight, a=math.sqrt(5))
-      elif self.experiment_type[adapter_name] == LoraExperimentType.MIXTURE_OF_LORA:
+      elif self.experiment_type[adapter_name] == LoraExperimentType.SPLIT_LORA:
         for i in range(self.m[adapter_name]):
           nn.init.zeros_(self.B[i][adapter_name].weight)
       elif self.experiment_type[adapter_name] == LoraExperimentType.LORA0:
@@ -375,6 +389,94 @@ class LoraLayerExp(LoraLayer):
     return result
 
 
+# ===== EDIT START =====
+def _apply_x_square(x, sign: bool = True):
+  if sign:
+    return x * x * torch.sign(x)
+  else:
+    return x * x
+
+
+def _apply_x_square_root(x, sign: bool = True):
+  if sign:
+    return torch.sqrt(torch.abs(x) + 1e-10) * torch.sign(x)
+  else:
+    return torch.sqrt(torch.abs(x) + 1e-10)
+
+
+def _apply_baabba(lora_A, lora_B, dropout, x):
+  z1 = lora_B(lora_A(dropout(x)))
+  z2 = z1 @ lora_B.weight @ lora_A.weight
+  return lora_B(lora_A(z2)), z1
+
+
+def _apply_mask(r, in_features, x):
+  mask = torch.abs(x) > torch.quantile(
+      torch.abs(x), 1. - float(r) / in_features)
+  return x * mask
+
+
+def _apply_norm_scaling(z1, z2):
+  scaling = torch.norm(z1, dim=(1, 2), p=2) / torch.maximum(
+      torch.norm(z2, dim=(1, 2), p=2),
+      torch.ones(1).to(z1.device) * 1e-5
+  )
+  scaling = scaling.reshape(-1, 1, 1)
+  return z2 * scaling
+
+
+def _apply_sum(z1, z2, scale: bool = True, mos: bool = False):
+  if mos:
+    mixture = torch.stack([z1, z2])
+    std = max(torch.max(mixture), 1e-5)
+    return torch.log(torch.mean(torch.exp(mixture / std), dim=0)) * std
+  elif scale:
+    z2 = _apply_norm_scaling(z1, z2)
+  return z1 + z2
+
+
+def _apply_layers(superlinear, r, in_features, lora_A, lora_B, dropout, x,
+                  mos: bool = False, scale: bool = True):
+  """Applies LoRA layers."""
+  if superlinear == "x":
+    return lora_B(lora_A(dropout(x)))
+  elif superlinear == "x^2":
+    return lora_B(lora_A(dropout(_apply_x_square(x))))
+  elif superlinear == "ns-x^2":
+    return lora_B(lora_A(dropout(_apply_x_square(x, sign=False))))
+  elif superlinear == "sqrt(x)":
+    return lora_B(lora_A(dropout(_apply_x_square_root(x))))
+  elif superlinear == "ns-sqrt(x)":
+    return lora_B(lora_A(dropout(_apply_x_square_root(x, sign=False))))
+  elif superlinear == "baabba":
+    return _apply_baabba(lora_A, lora_B, dropout, x)
+  elif superlinear == "mask":
+    return lora_B(lora_A(dropout(_apply_mask(r, in_features, x))))
+  elif superlinear == "mask-scale":
+    # Effectively boost the signal strength above the threshold by 2x.
+    return lora_B(lora_A(dropout(x + _apply_mask(r, in_features, x))))
+  elif superlinear == "ba+baabba":
+    z2, z1 = _apply_baabba(lora_A, lora_B, dropout, x)
+    z2 = _apply_norm_scaling(z2, z1)
+    return _apply_sum(z1, z2, scale=scale, mos=mos)
+  elif superlinear == "ba+baabba(x^2)":
+    z2, z1 = _apply_baabba(lora_A, lora_B, dropout, _apply_x_square(x))
+    z2 = _apply_norm_scaling(z2, z1)
+    return _apply_sum(z1, z2, scale=scale, mos=mos)
+  elif superlinear == "ba+baabba(mask(x))":
+    z2, z1 = _apply_baabba(lora_A, lora_B, dropout,
+                           _apply_mask(r, in_features, x))
+    z2 = _apply_norm_scaling(z2, z1)
+    return _apply_sum(z1, z2, scale=scale, mos=mos)
+  elif superlinear == "ba+baabba(mask-scale(x))":
+    z2, z1 = _apply_baabba(lora_A, lora_B, dropout,
+                           x + _apply_mask(r, in_features, x))
+    return _apply_sum(z1, z2, scale=scale, mos=mos)
+  else:
+    raise ValueError(f"Unknown superlinear type: {superlinear}")
+# ===== EDIT END =====
+
+
 class LinearExp(nn.Module, LoraLayerExp):
   """Linear for LoRA Experiment."""
   def __init__(
@@ -414,7 +516,7 @@ class LinearExp(nn.Module, LoraLayerExp):
         # ===== EDIT START =====
         m=kwargs["m"],
         use_lora0=kwargs["use_lora0"],
-        re_lora=kwargs["re_lora"],
+        superlinear=kwargs["superlinear"],
         use_scaling_beta=kwargs["use_scaling_beta"],
         # ===== EDIT END =====
     )
@@ -552,6 +654,23 @@ class LinearExp(nn.Module, LoraLayerExp):
 
     return output_tensor
 
+  def _apply_layers(self, active_adapter, lora_A, lora_B, dropout, x):
+    scale = True
+    mos = False
+    superlinear = self.superlinear[active_adapter]
+    if superlinear is None:
+      superlinear = "x"
+    elif superlinear.startswith("mos:"):
+      mos = True
+      superlinear = superlinear[4:]
+    elif superlinear.startswith("noscale:"):
+      scale = False
+      superlinear = superlinear[8:]
+    return _apply_layers(
+        superlinear, self.r[active_adapter],
+        self.in_features, lora_A, lora_B, dropout, x, scale=scale, mos=mos
+    )
+
   def forward(self, x: torch.Tensor, *args: Any, **kwargs: Any) -> torch.Tensor:
     # ===== EDIT START =====
     if _DEBUG:
@@ -585,50 +704,7 @@ class LinearExp(nn.Module, LoraLayerExp):
           else:
             return x
 
-        def apply_layers(active_adapter, lora_A, lora_B, dropout, x):
-          if self.re_lora[active_adapter] == "x":
-            return lora_B(lora_A(dropout(x)))
-          elif self.re_lora[active_adapter] == "x^2":
-            return lora_B(lora_A(dropout(x * x * torch.sign(x))))
-          elif self.re_lora[active_adapter] == "sqrt(x)":
-            return lora_B(lora_A(dropout(torch.sqrt(torch.abs(x) + 1e-8) * torch.sign(x))))
-          elif self.re_lora[active_adapter] == "baabba":
-            z = lora_B(lora_A(dropout(x)))
-            z = z @ lora_B.weight
-            z = z @ lora_A.weight
-            z = lora_B(lora_A(z))
-            return z
-          elif self.re_lora[active_adapter] == "mask":
-            mask = torch.abs(x) > torch.quantile(
-                torch.abs(x), 1. - float(self.r[active_adapter]) / self.in_features)
-            return lora_B(lora_A(dropout(x * mask)))
-          elif self.re_lora[active_adapter] == "mask-scale":
-            mask = torch.abs(x) > torch.quantile(
-                torch.abs(x), 1. - float(self.r[active_adapter]) / self.in_features)
-            # Effectively boost the signal strength above the threshold by 2x.
-            return lora_B(lora_A(dropout(x + x * mask)))
-          elif self.re_lora[active_adapter] == "ba+baabba":
-            z1 = lora_B(lora_A(dropout(x)))
-            # Uncomment the following for x^2 + ba+baabba.
-            # z1 = lora_B(lora_A(dropout(x * x * torch.sign(x))))
-            z2 = z1 @ lora_B.weight @ lora_A.weight
-            z2 = lora_B(lora_A(z2))
-            scaling = torch.norm(z1, dim=(1, 2), p=2) / torch.maximum(
-                torch.norm(z2, dim=(1, 2), p=2),
-                torch.ones(1).to(x.device) * 1e-5
-            )
-            scaling = scaling.reshape(-1, 1, 1)
-            z2 = z2 * scaling
-            return z1 + z2
-            # Uncomment below for the MoS(+Re).
-            # mixture_list = [z1, z2]
-            # mixture = torch.stack(mixture_list)
-            # std = max(torch.max(mixture) / 32., 1e-5)
-            # return torch.log(torch.mean(torch.exp(mixture / std), dim=0)) * std
-          else:
-            raise ValueError(f"Unknown re_lora type: {self.re_lora[active_adapter]}")
-
-        if self.experiment_type[active_adapter] == LoraExperimentType.MIXTURE_OF_LORA:
+        if self.experiment_type[active_adapter] == LoraExperimentType.SPLIT_LORA:
           if self.use_dora[active_adapter]:
             raise ValueError(f"dora is not supported at adapter: {active_adapter} which is of experiment type: {self.experiment_type[active_adapter]}")
 
@@ -640,15 +716,13 @@ class LinearExp(nn.Module, LoraLayerExp):
           for j in range(self.m[active_adapter]):
             lora_A = self.A[j][active_adapter]
             lora_B = self.B[j][active_adapter]
+            mixture_list.append(self._apply_layers(active_adapter, lora_A, lora_B, dropout, x))
 
           mixture = torch.stack(mixture_list)
-          std = max(torch.max(mixture) / 32., 1e-5)
-          # Uncomment below for various std.
-          # std = max(torch.max(mixture) / 1., 1e-5)
-          # std = 1.
+          std = max(torch.max(mixture) / 1., 1e-5)
           lora_result = torch.log(torch.mean(torch.exp(mixture / std), dim=0)) * std
           result = result + apply_scale(active_adapter, lora_result * scaling)
-        elif self.experiment_type[active_adapter] == LoraExperimentType.RE_LORA:
+        elif self.experiment_type[active_adapter] == LoraExperimentType.SUPERLINEAR_LORA:
           if self.use_dora[active_adapter]:
             raise ValueError(f"dora is not supported at adapter: {active_adapter} which is of experiment type: {self.experiment_type[active_adapter]}")
 
@@ -657,7 +731,7 @@ class LinearExp(nn.Module, LoraLayerExp):
           dropout = self.lora_dropout[active_adapter]
           scaling = self.scaling[active_adapter]
 
-          lora_result = apply_layers(active_adapter, lora_A, lora_B, dropout, x)
+          lora_result = self._apply_layers(active_adapter, lora_A, lora_B, dropout, x)
 
           result = result + apply_scale(active_adapter, lora_result * scaling)
         elif self.experiment_type[active_adapter] == LoraExperimentType.LORA0:
@@ -757,7 +831,7 @@ class LoraModelExp(LoraModel):
         "r": r,
         "m": lora_config.m,
         "use_lora0": lora_config.use_lora0,
-        "re_lora": lora_config.re_lora,
+        "superlinear": lora_config.superlinear,
         "use_scaling_beta": lora_config.use_scaling_beta,
         "lora_alpha": alpha,
         "lora_dropout": lora_config.lora_dropout,
