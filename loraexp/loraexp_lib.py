@@ -17,7 +17,7 @@ config = LoraConfigExp(
     use_lora0=args.lora0,
     m=args.mixture if args.mixture != 0 else None,
     superlinear=args.superlinear,
-    using_scaling_beta=args.use_scaling_beta,
+    using_scaling_gamma=args.use_scaling_gamma,
 )
 print(config)
 model.backbone.requires_grad_(False)
@@ -65,12 +65,12 @@ class LoraConfigExp(LoraConfig):
       metadata={"help": "Single matrix adaption, a.k.a. no LoRA"}
   )
   superlinear: str = dataclasses.field(
-      default='x',
+      default="x",
       metadata={"help": "Superlinear LoRA type of superlinearity"}
   )
-  use_scaling_beta: bool = dataclasses.field(
+  use_scaling_gamma: bool = dataclasses.field(
       default=False,
-      metadata={"help": "Learnable scaling beta"}
+      metadata={"help": "Learnable scaling gamma"}
   )
 
 
@@ -110,9 +110,10 @@ class LoraLayerExp(LoraLayer):
   """LoraLayer for LoRA Experiment."""
   # All names of layers that may contain (trainable) adapter weights
   # ===== EDIT START =====
-  adapter_layer_names = ("lora_A", "lora_B", "lora_embedding_A", "lora_embedding_B", "lora_A1", "lora_B1", "lora_A2", "lora_B2", "lora_A3", "lora_B3", "scaling_beta")
+  adapter_layer_names = ("lora_A", "lora_B", "lora_embedding_A", "lora_embedding_B", "lora_A1", "lora_B1", "lora_A2", "lora_B2", "lora_A3", "lora_B3", "scaling_gamma")
   # All names of other parameters that may contain adapter-related parameters
-  other_param_names = ("r", "lora_alpha", "scaling", "lora_dropout", "experiment_type", "m", "superlinear", "use_scaling_beta")
+  other_param_names = ("r", "lora_alpha", "scaling", "lora_dropout", "experiment_type", "m", "superlinear", "use_scaling_gamma", "scaling_gamma_acceleration")
+  SCALING_GAMMA_ACCELERATION = 100.
   # ===== EDIT END =====
 
   def __init__(self, base_layer: nn.Module, **kwargs) -> None:
@@ -125,7 +126,9 @@ class LoraLayerExp(LoraLayer):
     self.m = {}
     self.experiment_type = {}
     self.superlinear = {}
-    self.use_scaling_beta = {}
+    self.use_scaling_gamma = {}
+    self.scaling_gamma_acceleration = kwargs.pop(
+        "scaling_gamma_acceleration", LoraLayerExp.SCALING_GAMMA_ACCELERATION)
     # ===== EDIT END =====
     self.lora_alpha = {}
     self.scaling = {}
@@ -141,7 +144,7 @@ class LoraLayerExp(LoraLayer):
     self.lora_B3 = nn.ModuleDict({})
     self.A = {0: self.lora_A, 1: self.lora_A1, 2: self.lora_A2, 3: self.lora_A3}
     self.B = {0: self.lora_B, 1: self.lora_B1, 2: self.lora_B2, 3: self.lora_B3}
-    self.scaling_beta = nn.ParameterDict({})
+    self.scaling_gamma = nn.ParameterDict({})
     # ===== EDIT END =====
     # For Embedding layer
     self.lora_embedding_A = nn.ParameterDict({})
@@ -187,7 +190,7 @@ class LoraLayerExp(LoraLayer):
       self, adapter_name, r, lora_alpha, lora_dropout, init_lora_weights, use_rslora, use_dora: bool = False,
       # ===== EDIT START =====
       m: int | None = None, use_lora0: bool = False, superlinear: str | None = None,
-      use_scaling_beta: bool = False,
+      use_scaling_gamma: bool = False,
       # ===== EDIT END =====
   ):
     # ===== EDIT START =====
@@ -230,10 +233,11 @@ class LoraLayerExp(LoraLayer):
     self.lora_dropout.update(nn.ModuleDict({adapter_name: lora_dropout_layer}))
     # Actual trainable parameters
     # ===== EDIT START =====
-    self.use_scaling_beta[adapter_name] = use_scaling_beta
+    self.use_scaling_gamma[adapter_name] = use_scaling_gamma
     # (0.002 + 0.001) x 100.0 (later at forward()) is effectively a scaling
     # factor 3.0 to start with.
-    self.scaling_beta[adapter_name] = nn.Parameter(torch.tensor([[0.002]]))
+    self.scaling_gamma[adapter_name] = nn.Parameter(
+        torch.tensor([[0.2 / self.scaling_gamma_acceleration]]))
     if use_lora0:
       print(f" ********** LoRA0({r}) for layer: {adapter_name} **********")
       self.experiment_type[adapter_name] = LoraExperimentType.LORA0
@@ -390,6 +394,10 @@ class LoraLayerExp(LoraLayer):
 
 
 # ===== EDIT START =====
+def _accelerated_gamma(gamma: torch.Tensor, acceleration: float):
+  return acceleration * (nn.functional.relu(gamma) + 0.1 / acceleration)
+
+
 def _apply_x_square(x, sign: bool = True):
   if sign:
     return x * x * torch.sign(x)
@@ -453,7 +461,8 @@ def _apply_layers(superlinear, r, in_features, lora_A, lora_B, dropout, x,
   elif superlinear == "mask":
     return lora_B(lora_A(dropout(_apply_mask(r, in_features, x))))
   elif superlinear == "mask-scale":
-    # Effectively boost the signal strength above the threshold by 2x.
+    # Supress the signals below the threshold by havling them, effectively boost
+    # the relative signal strength above the threshold by 2x.
     return lora_B(lora_A(dropout(x + _apply_mask(r, in_features, x))))
   elif superlinear == "ba+baabba":
     z2, z1 = _apply_baabba(lora_A, lora_B, dropout, x)
@@ -517,7 +526,7 @@ class LinearExp(nn.Module, LoraLayerExp):
         m=kwargs["m"],
         use_lora0=kwargs["use_lora0"],
         superlinear=kwargs["superlinear"],
-        use_scaling_beta=kwargs["use_scaling_beta"],
+        use_scaling_gamma=kwargs["use_scaling_gamma"],
         # ===== EDIT END =====
     )
     self.is_target_conv_1d_layer = is_target_conv_1d_layer
@@ -654,6 +663,16 @@ class LinearExp(nn.Module, LoraLayerExp):
 
     return output_tensor
 
+  # ===== EDIT START =====
+  def _apply_scale(self, active_adapter, x):
+    if self.use_scaling_gamma[active_adapter]:
+      gamma = self.scaling_gamma[active_adapter]
+      # Minium is 1e-3, so the scaling factor is effectively capped at 10.
+      return x / _accelerated_gamma(
+          gamma, LoraLayerExp.SCALING_GAMMA_ACCELERATION)
+    else:
+      return x
+
   def _apply_layers(self, active_adapter, lora_A, lora_B, dropout, x):
     scale = True
     mos = False
@@ -670,6 +689,7 @@ class LinearExp(nn.Module, LoraLayerExp):
         superlinear, self.r[active_adapter],
         self.in_features, lora_A, lora_B, dropout, x, scale=scale, mos=mos
     )
+  # ===== EDIT END =====
 
   def forward(self, x: torch.Tensor, *args: Any, **kwargs: Any) -> torch.Tensor:
     # ===== EDIT START =====
@@ -696,14 +716,6 @@ class LinearExp(nn.Module, LoraLayerExp):
             continue
 
         # ===== EDIT START =====
-        def apply_scale(active_adapter, x):
-          if self.use_scaling_beta[active_adapter]:
-            beta = self.scaling_beta[active_adapter]
-            # Minium is 1e-3, so the scaling factor is effectively capped at 10.
-            return x / 100. / (nn.functional.relu(beta) + 1e-3)
-          else:
-            return x
-
         if self.experiment_type[active_adapter] == LoraExperimentType.SPLIT_LORA:
           if self.use_dora[active_adapter]:
             raise ValueError(f"dora is not supported at adapter: {active_adapter} which is of experiment type: {self.experiment_type[active_adapter]}")
@@ -719,9 +731,10 @@ class LinearExp(nn.Module, LoraLayerExp):
             mixture_list.append(self._apply_layers(active_adapter, lora_A, lora_B, dropout, x))
 
           mixture = torch.stack(mixture_list)
-          std = max(torch.max(mixture) / 1., 1e-5)
-          lora_result = torch.log(torch.mean(torch.exp(mixture / std), dim=0)) * std
-          result = result + apply_scale(active_adapter, lora_result * scaling)
+          alpha = max(torch.max(mixture) / 1., 1e-5)
+          lora_result = torch.log(torch.mean(torch.exp(mixture / alpha), dim=0)) * alpha
+          result = result + self._apply_scale(
+              active_adapter, lora_result * scaling)
         elif self.experiment_type[active_adapter] == LoraExperimentType.SUPERLINEAR_LORA:
           if self.use_dora[active_adapter]:
             raise ValueError(f"dora is not supported at adapter: {active_adapter} which is of experiment type: {self.experiment_type[active_adapter]}")
@@ -731,9 +744,10 @@ class LinearExp(nn.Module, LoraLayerExp):
           dropout = self.lora_dropout[active_adapter]
           scaling = self.scaling[active_adapter]
 
-          lora_result = self._apply_layers(active_adapter, lora_A, lora_B, dropout, x)
+          lora_result = self._apply_layers(
+              active_adapter, lora_A, lora_B, dropout, x)
 
-          result = result + apply_scale(active_adapter, lora_result * scaling)
+          result = result + self._apply_scale(active_adapter, lora_result * scaling)
         elif self.experiment_type[active_adapter] == LoraExperimentType.LORA0:
           if self.use_dora[active_adapter]:
             raise ValueError(f"dora is not supported at adapter: {active_adapter} which is of experiment type: {self.experiment_type[active_adapter]}")
@@ -832,7 +846,7 @@ class LoraModelExp(LoraModel):
         "m": lora_config.m,
         "use_lora0": lora_config.use_lora0,
         "superlinear": lora_config.superlinear,
-        "use_scaling_beta": lora_config.use_scaling_beta,
+        "use_scaling_gamma": lora_config.use_scaling_gamma,
         "lora_alpha": alpha,
         "lora_dropout": lora_config.lora_dropout,
         "fan_in_fan_out": lora_config.fan_in_fan_out,

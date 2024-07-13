@@ -75,7 +75,8 @@ if __name__ == "__main__":
     parser.add_argument("--mixture", type=int, default=0)
     parser.add_argument("--lora0", type=int, default=0)
     parser.add_argument("--superlinear", type=str, default="none")
-    parser.add_argument("--scaling-beta", type=int, default=0)
+    parser.add_argument("--scaling-gamma", type=int, default=0)
+    parser.add_argument("--use-dora", type=int, default=0)
     args = parser.parse_args()
 
     if not args.pretrained:
@@ -123,7 +124,7 @@ if __name__ == "__main__":
                 use_lora0=args.lora0,
                 m=args.mixture if args.mixture != 0 else None,
                 superlinear=args.superlinear if args.superlinear != "none" else None,
-                use_scaling_beta=args.scaling_beta,
+                use_scaling_gamma=args.scaling_gamma,
             )
             print(config)
             model.backbone.requires_grad_(False)
@@ -136,6 +137,7 @@ if __name__ == "__main__":
                 bias="none",
                 lora_dropout=0.05,
                 task_type="CAUSAL_LM",
+                use_dora=args.use_dora,
             )
             print(config)
             model.backbone.requires_grad_(False)
@@ -174,7 +176,7 @@ if __name__ == "__main__":
         type="torch", columns=["input_ids", "attention_mask", "labels"]
     )
 
-    # Force setting the `scaling_beta` to be trainable.
+    # Force setting the `scaling_gamma` to be trainable.
     for param in model.parameters():
         if param.shape == torch.Size([1, 1]):
             param.requires_grad = True
@@ -274,13 +276,13 @@ if __name__ == "__main__":
         )
     trainer.train()
 
-    if args.scaling_beta:
+    if args.scaling_gamma:
         beta_list = []
         for param in model.parameters():
             if param.shape == torch.Size([1, 1]):
                 beta_list.append(float(param))
         beta_arr = torch.nn.functional.relu(torch.tensor(beta_list)) + 0.001
-        print(f" --> scaling_beta: {torch.mean(0.01 / beta_arr)}")
+        print(f" --> scaling_gamma: {torch.mean(0.01 / beta_arr)}")
 
 #    metrics = trainer.evaluate(test_dataset)
 #    print(metrics)

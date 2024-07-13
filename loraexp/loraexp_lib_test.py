@@ -160,7 +160,7 @@ class LoraexpLibTest(unittest.TestCase):
         m=None,
         use_lora0=False,
         superlinear=None,
-        use_scaling_beta=False,
+        use_scaling_gamma=False,
     )
     layer.superlinear["default"] = "test"
     layer._apply_layers("default", None, None, None, None)
@@ -184,7 +184,7 @@ class LoraexpLibTest(unittest.TestCase):
         m=None,
         use_lora0=False,
         superlinear=None,
-        use_scaling_beta=False,
+        use_scaling_gamma=False,
     )
     layer.superlinear["default"] = "mos:test"
     layer._apply_layers("default", None, None, None, None)
@@ -208,7 +208,7 @@ class LoraexpLibTest(unittest.TestCase):
         m=None,
         use_lora0=False,
         superlinear=None,
-        use_scaling_beta=False,
+        use_scaling_gamma=False,
     )
     layer.superlinear["default"] = "noscale:test"
     layer._apply_layers("default", None, None, None, None)
@@ -232,13 +232,69 @@ class LoraexpLibTest(unittest.TestCase):
         m=None,
         use_lora0=False,
         superlinear=None,
-        use_scaling_beta=False,
+        use_scaling_gamma=False,
     )
     layer.superlinear["default"] = None
     layer._apply_layers("default", None, None, None, None)
     mocked_apply_layers.assert_called_once_with(
         "x", 2, 5, None, None, None, None, mos=False, scale=True,
     )
+
+  def test_accelerated_gamma(self):
+    gamma = torch.tensor([0.002, 0.004, 0.0, -0.001])
+    self.assertLessEqual(
+        torch.norm(
+            loraexp_lib._accelerated_gamma(gamma, 100.)
+            - torch.tensor([0.3, 0.5, 0.1, 0.1]), p=2), 1e-4)
+
+    layer = loraexp_lib.LinearExp(
+        torch.nn.Linear(5, 3),
+        adapter_name="default",
+        r=2,
+        lora_alpha=1,
+        lora_dropout=0.0,
+        fan_in_fan_out=False,
+        is_target_conv_1d_layer=False,
+        init_lora_weights=True,
+        use_rslora=False,
+        use_dora=False,
+        m=None,
+        use_lora0=False,
+        superlinear=None,
+        use_scaling_gamma=False,
+    )
+    x = torch.arange(10) / 10.
+    self.assertLessEqual(
+        torch.norm(
+            layer._apply_scale("default", x)
+            - torch.tensor(
+                [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]))
+        * 10. / 3., 1e-4)
+
+    layer = loraexp_lib.LinearExp(
+        torch.nn.Linear(5, 3),
+        adapter_name="default",
+        r=2,
+        lora_alpha=1,
+        lora_dropout=0.0,
+        fan_in_fan_out=False,
+        is_target_conv_1d_layer=False,
+        init_lora_weights=True,
+        use_rslora=False,
+        use_dora=False,
+        m=None,
+        use_lora0=False,
+        superlinear=None,
+        use_scaling_gamma=False,
+        scaling_gamma_acceleration=10.,
+    )
+    self.assertEqual(layer.scaling_gamma_acceleration, 10.)
+    self.assertLessEqual(
+        torch.norm(
+            layer._apply_scale("default", x)
+            - torch.tensor(
+                [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]))
+        * 10. / 3., 1e-4)
 
 
 if __name__ == "__main__":
