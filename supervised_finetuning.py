@@ -18,7 +18,6 @@ from typing import List, Optional, Tuple, Union
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 import llm_reconstruction_free
 import os
-import uuid
 from datasets import (
     load_dataset_builder,
     get_dataset_split_names,
@@ -31,13 +30,18 @@ import wandb
 import bitsandbytes
 from sklearn import metrics
 import numpy as np
+from loraexp.loraexp_lib import LoraConfigExp, get_peft_model_exp
 
 LARGE_MODELS = [
     "meta-llama/Meta-Llama-3-8B",
     "Qwen/Qwen2-7B",
+    "Qwen/Qwen2-1.5B",
     "mistralai/Mistral-7B-v0.1",
     "mistralai/Mistral-7B-v0.3",
     "google/gemma-7b",
+    "google/gemma-2b",
+    "microsoft/phi-2",
+    "apple/OpenELM-3B",
     ]
 
 
@@ -69,6 +73,11 @@ if __name__ == "__main__":
     parser.add_argument("--label-smoothing", type=float, default=0)
     parser.add_argument("--from-gcs", type=str, default="none")
     parser.add_argument("--eval-steps", type=int, default=20)
+    parser.add_argument("--mixture", type=int, default=0)
+    parser.add_argument("--lora0", type=int, default=0)
+    parser.add_argument("--superlinear", type=str, default="none")
+    parser.add_argument("--scaling-gamma", type=int, default=0)
+    parser.add_argument("--use-dora", type=int, default=0)
     args = parser.parse_args()
 
     if args.pretrained_tokenizer is None:
@@ -108,16 +117,35 @@ if __name__ == "__main__":
     )
 
     if args.lora_rank:
-        config = LoraConfig(
-            r=args.lora_rank,
-            lora_alpha=args.lora_rank,
-            target_modules=llm_reconstruction_free.utils.name_to_lora(args.backbone),
-            bias="none",
-            lora_dropout=0.05,
-            task_type="CAUSAL_LM",
-        )
-        model.backbone.requires_grad_(False)
-        model = get_peft_model(model, config)
+        if args.lora0 != 0 or args.mixture != 0 or args.superlinear != "none":
+            config = LoraConfigExp(
+                r=args.lora_rank,
+                lora_alpha=args.lora_rank,
+                target_modules=llm_reconstruction_free.utils.name_to_lora(args.backbone),
+                bias="none",
+                lora_dropout=0.05,
+                task_type="CAUSAL_LM",
+                use_lora0=args.lora0,
+                m=args.mixture if args.mixture != 0 else None,
+                superlinear=args.superlinear if args.superlinear != "none" else None,
+                use_scaling_gamma=args.scaling_gamma,
+            )
+            print(config)
+            model.backbone.requires_grad_(False)
+            model = get_peft_model_exp(model, config)
+        else:
+            config = LoraConfig(
+                r=args.lora_rank,
+                lora_alpha=args.lora_rank,
+                target_modules=llm_reconstruction_free.utils.name_to_lora(args.backbone),
+                bias="none",
+                lora_dropout=0.05,
+                task_type="CAUSAL_LM",
+                use_dora=args.use_dora,
+            )
+            print(config)
+            model.backbone.requires_grad_(False)
+            model = get_peft_model(model, config)
     elif args.freeze:
         assert args.lora_rank == 0
         model.backbone.requires_grad_(False)
@@ -152,23 +180,28 @@ if __name__ == "__main__":
         type="torch", columns=["input_ids", "attention_mask", "labels"]
     )
 
+    # Force setting the `scaling_gamma` to be trainable.
+    for param in model.parameters():
+        if param.shape == torch.Size([1, 1]):
+            param.requires_grad = True
     params = [p for p in model.parameters() if p.requires_grad]
-#    optimizer = torch.optim.AdamW(
-#        params, weight_decay=args.weight_decay, lr=args.learning_rate
-#    )
+
+    # optimizer = torch.optim.AdamW(
+    #     params, weight_decay=args.weight_decay, lr=args.learning_rate
+    # )
 
     optimizer = transformers.Adafactor(
-    params,
-    lr=args.learning_rate,
-    eps=(1e-30, 1e-3),
-    clip_threshold=1.0,
-    decay_rate=-0.8,
-    beta1=None,
-    weight_decay=args.weight_decay,
-    relative_step=False,
-    scale_parameter=False,
-    warmup_init=False,
-)
+        params,
+        lr=args.learning_rate,
+        eps=(1e-30, 1e-3),
+        clip_threshold=1.0,
+        decay_rate=-0.8,
+        beta1=None,
+        weight_decay=args.weight_decay,
+        relative_step=False,
+        scale_parameter=False,
+        warmup_init=False,
+    )
 
     assert args.batch_size >= (8 * args.per_device_batch_size)
     n_accumulation = args.batch_size // (8 * args.per_device_batch_size)
@@ -176,29 +209,27 @@ if __name__ == "__main__":
     scheduler = transformers.get_cosine_schedule_with_warmup(
         optimizer,
         num_warmup_steps=int(0.05 * args.training_steps),
-        num_training_steps=args.training_steps*n_accumulation,
+        num_training_steps=args.training_steps * n_accumulation,
     )
-
     print("---- OPTIMIZER")
     print(optimizer)
 
-
     training_args = TrainingArguments(
-        output_dir=f"~/supervised_finetuning/{uuid.uuid4()}/outputs",
+        output_dir=f"~/supervised_finetuning/{args.dataset}/{args.backbone}/outputs",
         per_device_train_batch_size=args.per_device_batch_size,
         per_device_eval_batch_size=args.per_device_batch_size,
         gradient_accumulation_steps=n_accumulation,
         max_steps=args.training_steps * n_accumulation,
         max_grad_norm=1,
         logging_steps=5,
-        logging_dir=f"~/supervised_finetuning/{uuid.uuid4()}/logs",
+        logging_dir=f"~/supervised_finetuning/{args.dataset}/{args.backbone}/logs",
         #        save_steps=100,
         eval_accumulation_steps=1,
         eval_strategy="steps",
         eval_steps=args.eval_steps,
         dataloader_num_workers=2,
-        report_to="wandb",
         gradient_checkpointing=False,
+        report_to="wandb",
         overwrite_output_dir="True",
         save_strategy="no",
         load_best_model_at_end=False,
@@ -242,12 +273,21 @@ if __name__ == "__main__":
 
     if int(os.environ["LOCAL_RANK"]) == 0:
         wandb.init(
-            project="supervised_finetuning",
+            # project="supervised_finetuning",
+            project="8k_corrected_finetuning",
             config=args,
             group=f"dataset={args.dataset}-backbone={args.backbone}",
         )
     trainer.train()
-#
+
+    if args.scaling_gamma:
+        beta_list = []
+        for param in model.parameters():
+            if param.shape == torch.Size([1, 1]):
+                beta_list.append(float(param))
+        beta_arr = torch.nn.functional.relu(torch.tensor(beta_list)) + 0.001
+        print(f" --> scaling_gamma: {torch.mean(0.01 / beta_arr)}")
+
 #    metrics = trainer.evaluate(test_dataset)
 #    print(metrics)
 #
