@@ -59,6 +59,7 @@ if __name__ == "__main__":
     parser.add_argument("--per-device-batch-size", type=int, default=8)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--pretrained", type=lambda x: True if x == "1" else False)
+    parser.add_argument("--pretrained-tokenizer", type=lambda x: True if x == "1" else False, default=None)
     parser.add_argument("--weight-decay", type=float, default=1e-5)
     parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument("--dropout", type=float, default=0)
@@ -70,6 +71,9 @@ if __name__ == "__main__":
     parser.add_argument("--eval-steps", type=int, default=20)
     args = parser.parse_args()
 
+    if args.pretrained_tokenizer is None:
+        args.pretrained_tokenizer = args.pretrained
+
     if not args.pretrained:
         assert args.vocab_size is not None
 
@@ -77,7 +81,7 @@ if __name__ == "__main__":
     data = llm_reconstruction_free.data.from_name(args.dataset, from_gcs=from_gcs)
     train_dataset, test_dataset = data["train"], data["test"]
 
-    if args.pretrained:
+    if args.pretrained_tokenizer:
         tokenizer = llm_reconstruction_free.tokenizer.from_model(
             args.backbone, from_gcs=from_gcs
         )

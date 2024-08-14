@@ -10,7 +10,7 @@ pd.set_option("display.max_rows", 340)
 df = pd.DataFrame(columns=["dataset", "arch", "pct", "acc"])
 api = wandb.Api()
 
-runs = api.runs("llm-reconstruction-free/supervised_finetuning")
+runs = api.runs("llm-reconstruction-free/8k_corrected_finetuning")
 all_data = []
 scatter_x = {}
 scatter_y_with = {}
@@ -20,12 +20,13 @@ model = []
 comparison_with = {}
 comparison_without = {}
 for run in runs:
-    if run.state != "finished":
+#    if pd.to_datetime(run.metadata["startedAt"]) < pd.to_datetime("07/02/2024"):
+#        break
+    if run.metadata["gpu_devices"] is None:
         continue
-    if "L4" in run.metadata["gpu_devices"][0]["name"]:
+    if "H100" not in run.metadata["gpu_devices"][0]["name"]:
         continue
-    if pd.to_datetime(run.metadata["startedAt"]) < pd.to_datetime("06/17/2024"):
-        break
+    
     data = []
     for row in run.scan_history():
         if "eval/accuracy" not in row:
@@ -92,6 +93,7 @@ for run in runs:
         all_data[-1]["init"] = "pretrained" if run.config["pretrained"] else "random"
     except Exception as e:
         print(e)
+        raise(e)
         continue
 
     print(all_data[-1])
@@ -143,6 +145,18 @@ for run in runs:
 #plt.close()
 
 df = pd.concat(all_data, axis=1).T
+
+df = pd.pivot_table(
+    df,
+    values="F1",
+    columns=["dataset"],
+    index=["backbone", "init", "finetuning"],
+    aggfunc='max'#lambda x:len(x),
+)
+df = df.drop(columns="medical")
+df = df.assign(mean=df.mean(1))
+print(df.to_latex(float_format="%.2f"))
+adf
 df = pd.pivot_table(
     df,
     values="F1",
@@ -151,7 +165,7 @@ df = pd.pivot_table(
     aggfunc='max'#lambda x:len(x),
 )
 print(df)
-print(df.loc[:,(slice(None), slice(None), "2000")])
+print(df.loc[:,(slice(None), slice(None), "8000")])
 asdf
 df = df.loc[
     (

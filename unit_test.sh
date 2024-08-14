@@ -14,7 +14,7 @@ function run_one() {
     --pretrained=$pretrained --training-steps $training_steps \
     --per-device-batch-size $per_device_batch_size --backbone $backbone \
     --lora-rank=$lora_rank --freeze=$freeze \
-    --vocab-size=$vocab_size --eval-steps=$eval_steps --learning-rate 1e-4
+    --vocab-size=$vocab_size --eval-steps=$eval_steps --learning-rate 1e-4 --pretrained-tokenizer 1
 }
 
 function run_suite() {
@@ -38,7 +38,7 @@ from_gcs="none"
 eval_steps=50
 dataset=sst2
 
-for training_steps in 2000 20000 60000
+for training_steps in 2000
 do
 	for backbone in "Snowflake/snowflake-arctic-embed-xs" 
 	do
