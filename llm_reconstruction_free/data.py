@@ -29,7 +29,11 @@ NAMES = [
     "valurank/Topic_Classification",
     "marksverdhei/clickbait_title_classification",
     "climatebert/climate_sentiment",
-    "PriyaPatel/Bias_identification"
+    "PriyaPatel/Bias_identification",
+    "legacy-datasets/banking77",
+    "ucirvine/sms_spam",
+    "Bhuvaneshwari/intent_classification",
+    "valurank/Topic_Classification"
 ]
 
 
@@ -106,6 +110,13 @@ def from_name(name: str, from_gcs: str = None):
         elif name == "DeveloperOats/DBPedia_Classes":
             data[split] = data[split].rename_column("l1", "labels")
             data[split] = data[split].class_encode_column("labels")
+        elif name == "Bhuvaneshwari/intent_classification":
+            data[split] = data[split].rename_column("intent", "labels")
+            data[split] = data[split].class_encode_column("labels")
+        elif name == "valurank/Topic_Classification":
+            data[split] = data[split].rename_column("article_text", "text")
+            data[split] = data[split].rename_column("topic", "labels")
+            data[split] = data[split].class_encode_column("labels")
         elif name == "valurank/Topic_Classification":
             data[split] = data[split].rename_column("article_text", "text")
             data[split] = data[split].rename_column("topic", "labels")
@@ -116,6 +127,8 @@ def from_name(name: str, from_gcs: str = None):
         elif name == "PriyaPatel/Bias_identification":
             data[split] = data[split].rename_column("context", "text")
             data[split] = data[split].rename_column("bias_type", "labels")
+        elif name == "ucirvine/sms_spam":
+            data[split] = data[split].rename_column("sms", "text")
         data[split] = data[split].filter(lambda row: row["labels"] >= 0)
         assert "text" in data[split].column_names
         print(f"\t-{split}: {data[split].shape}")
@@ -123,6 +136,6 @@ def from_name(name: str, from_gcs: str = None):
         data["test"] = data["validation"]
         del data["validation"]
     if "test" not in data:
-        data = data["train"].train_test_split(test_size=0.3)
+        data = data["train"].train_test_split(test_size=0.3, shuffle=True, seed=42)
     print("\t-columns:", data[split].column_names)
     return data
