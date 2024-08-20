@@ -25,6 +25,11 @@ NAMES = [
     "emotion",
     "snli",
     "medical",
+    "DeveloperOats/DBPedia_Classes",
+    "valurank/Topic_Classification",
+    "marksverdhei/clickbait_title_classification",
+    "climatebert/climate_sentiment",
+    "PriyaPatel/Bias_identification"
 ]
 
 
@@ -98,77 +103,26 @@ def from_name(name: str, from_gcs: str = None):
 
             data[split] = data[split].map(preprocess, batched=True)
             data[split] = data[split].rename_column("question_1", "text")
+        elif name == "DeveloperOats/DBPedia_Classes":
+            data[split] = data[split].rename_column("l1", "labels")
+            data[split] = data[split].class_encode_column("labels")
+        elif name == "valurank/Topic_Classification":
+            data[split] = data[split].rename_column("article_text", "text")
+            data[split] = data[split].rename_column("topic", "labels")
+            data[split] = data[split].class_encode_column("labels")
+        elif name == "marksverdhei/clickbait_title_classification":
+            data[split] = data[split].rename_column("title", "text")
+            data[split] = data[split].rename_column("clickbait", "labels")
+        elif name == "PriyaPatel/Bias_identification":
+            data[split] = data[split].rename_column("context", "text")
+            data[split] = data[split].rename_column("bias_type", "labels")
         data[split] = data[split].filter(lambda row: row["labels"] >= 0)
         assert "text" in data[split].column_names
         print(f"\t-{split}: {data[split].shape}")
     if name == "stanfordnlp/sst2":
         data["test"] = data["validation"]
         del data["validation"]
-    elif name == "medical_questions_pairs":
+    if "test" not in data:
         data = data["train"].train_test_split(test_size=0.3)
     print("\t-columns:", data[split].column_names)
     return data
-
-
-def get_pretraining_dataset():
-
-    print("splits for rotten", get_dataset_split_names("rotten_tomatoes"))
-    print("splits for imdb", get_dataset_split_names("imdb"))
-    print("splits for snli", get_dataset_split_names("snli"))
-
-    rotten_tomatoes = load_dataset("rotten_tomatoes", split="train")
-    imdb = load_dataset("imdb", split="train")
-    snli = load_dataset("snli", split="train")
-
-    # for pre-training
-    snli = snli.rename_column("premise", "text")
-    snli = snli.remove_columns("hypothesis")
-
-    # for pre training
-    snli = snli.remove_columns("label")
-    imdb = imdb.remove_columns("label")
-    rotten_tomatoes = rotten_tomatoes.remove_columns("label")
-    train_dataset = concatenate_datasets([rotten_tomatoes, imdb, snli])
-    return train_dataset
-
-
-def get_rotten():
-    train_dataset = load_dataset("rotten_tomatoes", split="train")
-    test_dataset = load_dataset("rotten_tomatoes", split="test")
-    train_dataset = train_dataset.rename_column("label", "labels")
-    test_dataset = test_dataset.rename_column("label", "labels")
-    return train_dataset, test_dataset
-
-
-def get_yelp():
-    train_dataset = load_dataset("yelp_review_full", split="train")
-    test_dataset = load_dataset("yelp_review_full", split="test")
-    return train_dataset, test_dataset
-
-
-def get_sst2():
-    train_dataset = load_dataset("sst2", split="train")
-    test_dataset = load_dataset("sst2", split="test")
-    return train_dataset, test_dataset
-
-
-def get_civil():
-    train_dataset = load_dataset("civil_comments", split="train")
-    test_dataset = load_dataset("civil_comments", split="test")
-    return train_dataset, test_dataset
-
-
-def get_snli():
-    train_dataset = load_dataset("snli", split="train")
-    test_dataset = load_dataset("snli", split="test")
-    train_dataset = train_dataset.rename_column("label", "labels")
-    test_dataset = test_dataset.rename_column("label", "labels")
-    return train_dataset, test_dataset
-
-
-def get_imdb():
-    train_dataset = load_dataset("imdb", split="train")
-    test_dataset = load_dataset("imdb", split="test")
-    train_dataset = train_dataset.rename_column("label", "labels")
-    test_dataset = test_dataset.rename_column("label", "labels")
-    return train_dataset, test_dataset

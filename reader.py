@@ -24,7 +24,9 @@ for run in runs:
 #        break
     if run.metadata["gpu_devices"] is None:
         continue
-    if "H100" not in run.metadata["gpu_devices"][0]["name"]:
+#    if "H100" not in run.metadata["gpu_devices"][0]["name"]:
+#        continue
+    if run.config["pretrained"]==0 and run.config["vocab_size"] != 32000:
         continue
     
     data = []
@@ -155,7 +157,9 @@ df = pd.pivot_table(
 )
 df = df.drop(columns="medical")
 df = df.assign(mean=df.mean(1))
-print(df.to_latex(float_format="%.2f"))
+print(df.to_latex(float_format="%.1f"))
+print(df.groupby(level=2).apply(max).to_latex(float_format="%.1f"))
+
 adf
 df = pd.pivot_table(
     df,
