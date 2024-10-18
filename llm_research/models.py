@@ -8,7 +8,7 @@ from typing import List, Optional, Tuple, Union
 from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutput
 import wandb
 import numpy as np
-from llm_reconstruction_free import MODELS
+from llm_research import MODELS
 from . import gcs
 
 
