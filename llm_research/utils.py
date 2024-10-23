@@ -1,5 +1,5 @@
 import transformers
-from llm_reconstruction_free import MODELS, models
+from llm_research import MODELS, models
 import torch
 from torch import nn
 import inspect

@@ -16,7 +16,7 @@ import math
 import warnings
 from typing import List, Optional, Tuple, Union
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-import llm_reconstruction_free
+import llm_research
 import os
 from datasets import (
     load_dataset_builder,
@@ -49,7 +49,7 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument(
         "--backbone",
-        choices=llm_reconstruction_free.MODELS,
+        choices=llm_research.MODELS,
         default="apple/OpenELM-450M",
     )
     parser.add_argument("--freeze", type=lambda x: True if x == "1" else False)
@@ -57,7 +57,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset",
         default="rotten_tomatoes",
-        choices=llm_reconstruction_free.data.NAMES,
+        choices=llm_research.data.NAMES,
     )
     parser.add_argument("--training-steps", type=int, default=200)
     parser.add_argument("--per-device-batch-size", type=int, default=8)
@@ -87,22 +87,23 @@ if __name__ == "__main__":
         assert args.vocab_size is not None
 
     from_gcs = None if args.from_gcs == "none" else args.from_gcs
-    data = llm_reconstruction_free.data.from_name(args.dataset, from_gcs=from_gcs)
+    data = llm_research.data.from_name(args.dataset, from_gcs=from_gcs)
     train_dataset, test_dataset = data["train"], data["test"]
 
     if args.pretrained_tokenizer:
-        tokenizer = llm_reconstruction_free.tokenizer.from_model(
+        tokenizer = llm_research.tokenizer.from_model(
             args.backbone, from_gcs=from_gcs
         )
     else:
-        tokenizer = llm_reconstruction_free.tokenizer.from_data(
+        tokenizer = llm_research.tokenizer.from_data(
             train_dataset, variant="BPE", vocab_size=args.vocab_size
         )
 
     print(f"Tokenizer vocab_size: {len(tokenizer.vocab)}")
 
     num_classes = int(np.max(train_dataset["labels"]) + 1)
-    model = llm_reconstruction_free.utils.get_model(
+
+    model = llm_research.utils.get_model(
         args.backbone,
         tokenizer,
         pretrained=args.pretrained,
@@ -121,7 +122,7 @@ if __name__ == "__main__":
             config = LoraConfigExp(
                 r=args.lora_rank,
                 lora_alpha=args.lora_rank,
-                target_modules=llm_reconstruction_free.utils.name_to_lora(args.backbone),
+                target_modules=llm_research.utils.name_to_lora(args.backbone),
                 bias="none",
                 lora_dropout=0.05,
                 task_type="CAUSAL_LM",
@@ -137,7 +138,7 @@ if __name__ == "__main__":
             config = LoraConfig(
                 r=args.lora_rank,
                 lora_alpha=args.lora_rank,
-                target_modules=llm_reconstruction_free.utils.name_to_lora(args.backbone),
+                target_modules=llm_research.utils.name_to_lora(args.backbone),
                 bias="none",
                 lora_dropout=0.05,
                 task_type="CAUSAL_LM",
