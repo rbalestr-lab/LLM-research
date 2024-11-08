@@ -1,170 +1,165 @@
-name: llm-env
+name: llm
 channels:
-  - defaults
   - pytorch
   - nvidia
   - conda-forge
-  - default
+  - defaults
 dependencies:
-  - aiohappyeyeballs=2.4.0
-  - aiohttp=3.10.5
-  - aiosignal=1.2.0
-  - attrs=24.2.0
-  - aws-c-auth=0.7.31
-  - aws-c-cal=0.7.4
-  - aws-c-common=0.9.29
-  - aws-c-compression=0.2.19
-  - aws-c-event-stream=0.4.3
-  - aws-c-http=0.8.10
-  - aws-c-io=0.14.19
-  - aws-c-mqtt=0.10.7
-  - aws-c-s3=0.6.7
-  - aws-c-sdkutils=0.1.19
-  - aws-checksums=0.1.20
-  - aws-crt-cpp=0.28.3
-  - aws-sdk-cpp=1.11.407
-  - azure-core-cpp=1.14.0
-  - azure-identity-cpp=1.10.0
-  - azure-storage-blobs-cpp=12.13.0
-  - azure-storage-common-cpp=12.8.0
-  - azure-storage-files-datalake-cpp=12.12.0
+  - _libgcc_mutex=0.1
+  - _openmp_mutex=4.5
   - blas=1.0
-  - bottleneck=1.3.7
-  - brotli-python=1.0.9
+  - brotli-python=1.1.0
   - bzip2=1.0.8
-  - c-ares=1.34.2
   - ca-certificates=2024.9.24
   - certifi=2024.8.30
   - charset-normalizer=3.3.2
-  - datasets=2.19.1
-  - dill=0.3.8
-  - filelock=3.13.1
+  - cuda-cudart=12.1.105
+  - cuda-cupti=12.1.105
+  - cuda-libraries=12.1.0
+  - cuda-nvrtc=12.1.105
+  - cuda-nvtx=12.1.105
+  - cuda-opencl=12.4.127
+  - cuda-runtime=12.1.0
+  - cudatoolkit=11.8.0
+  - ffmpeg=4.3
+  - filelock=3.13.4
   - freetype=2.12.1
-  - frozenlist=1.4.0
-  - fsspec=2024.3.1
-  - gflags=2.2.2
-  - giflib=5.2.2
-  - glog=0.7.1
-  - huggingface_hub=0.24.6
-  - icu=75.1
+  - gmp=6.3.0
+  - gmpy2=2.1.5
+  - gnutls=3.6.13
+  - icu=73.2
   - idna=3.7
-  - jinja2=3.1.4
-  - krb5=1.21.3
-  - lcms2=2.16
+  - intel-openmp=2023.1.0
+  - jinja2=3.1.3
+  - jpeg=9e
+  - lame=3.100
+  - lcms2=2.15
+  - ld_impl_linux-64=2.40
   - lerc=4.0.0
-  - libabseil=20240722.0
-  - libarrow=17.0.0
-  - libarrow-acero=17.0.0
-  - libarrow-dataset=17.0.0
-  - libarrow-substrait=17.0.0
-  - libbrotlicommon=1.1.0
-  - libbrotlidec=1.1.0
-  - libbrotlienc=1.1.0
-  - libcrc32c=1.1.2
-  - libcurl=8.10.1
-  - libcxx=19.1.2
-  - libdeflate=1.22
-  - libedit=3.1.20230828
-  - libev=4.33
-  - libevent=2.1.12
-  - libexpat=2.6.3
-  - libffi=3.4.4
-  - libgfortran=5.0.0
-  - libgfortran5=11.3.0
-  - libgoogle-cloud=2.30.0
-  - libgoogle-cloud-storage=2.30.0
-  - libgrpc=1.65.5
+  - libblas=3.9.0
+  - libcblas=3.9.0
+  - libcublas=12.1.0.26
+  - libcufft=11.0.2.4
+  - libcufile=1.9.1.3
+  - libcurand=10.3.5.147
+  - libcusolver=11.4.4.55
+  - libcusparse=12.0.2.55
+  - libdeflate=1.17
+  - libffi=3.4.2
+  - libgcc-ng=13.2.0
+  - libgfortran-ng=13.2.0
+  - libgfortran5=13.2.0
+  - libgomp=13.2.0
+  - libhwloc=2.10.0
   - libiconv=1.17
-  - libjpeg-turbo=3.0.3
-  - libnghttp2=1.58.0
-  - libopenblas=0.3.21
-  - libparquet=17.0.0
-  - libpng=1.6.44
-  - libprotobuf=5.27.5
-  - libre2-11=2024.07.02
-  - libsqlite=3.46.1
-  - libssh2=1.11.0
-  - libthrift=0.21.0
-  - libtiff=4.7.0
-  - libutf8proc=2.8.0
-  - libwebp=1.4.0
+  - libjpeg-turbo=2.0.0
+  - liblapack=3.9.0
+  - libnpp=12.0.2.50
+  - libnsl=2.0.1
+  - libnvjitlink=12.1.105
+  - libnvjpeg=12.1.1.14
+  - libpng=1.6.43
+  - libsqlite=3.45.3
+  - libstdcxx-ng=13.2.0
+  - libtiff=4.5.0
+  - libuuid=2.38.1
   - libwebp-base=1.4.0
-  - libxcb=1.17.0
-  - libxml2=2.12.7
-  - libzlib=1.3.1
-  - llvm-openmp=14.0.6
-  - lz4-c=1.9.4
-  - markupsafe=2.1.3
+  - libxcb=1.13
+  - libxcrypt=4.4.36
+  - libxml2=2.12.6
+  - libzlib=1.2.13
+  - llvm-openmp=15.0.7
+  - markupsafe=2.1.5
+  - mkl=2023.1.0
+  - mpc=1.3.1
+  - mpfr=4.2.1
   - mpmath=1.3.0
-  - multidict=6.0.4
-  - multiprocess=0.70.15
-  - ncurses=6.5
+  - ncurses=6.4.20240210
+  - nettle=3.6
   - networkx=3.3
-  - numexpr=2.8.7
   - numpy=1.26.4
-  - numpy-base=1.26.4
-  - openjpeg=2.5.2
-  - openssl=3.3.2
-  - orc=2.0.2
-  - packaging=24.1
-  - pandas=2.2.2
-  - pillow=11.0.0
-  - pip=24.2
-  - pthread-stubs=0.3
-  - pyarrow=17.0.0
-  - pyarrow-core=17.0.0
+  - openh264=2.1.1
+  - openjpeg=2.5.0
+  - openssl=3.2.1
+  - pillow=9.4.0
+  - pip=24.0
+  - pthread-stubs=0.4
   - pysocks=1.7.1
-  - python=3.12.7
-  - python-dateutil=2.9.0post0
-  - python-tzdata=2023.3
-  - python-xxhash=2.0.2
-  - python_abi=3.12
-  - pytorch=2.5.0
-  - pytz=2024.1
-  - pyyaml=6.0.2
-  - re2=2024.07.02
+  - python=3.10.14
+  - python_abi=3.10
+  - pytorch=2.3.0
+  - pytorch-cuda=12.1
+  - pytorch-mutex=1.0
+  - pyyaml=6.0.1
   - readline=8.2
-  - regex=2024.9.11
-  - requests=2.32.3
-  - safetensors=0.4.4
-  - setuptools=75.1.0
-  - six=1.16.0
-  - snappy=1.2.1
+  - setuptools=69.5.1
+  - sympy=1.12
+  - tbb=2021.12.0
   - tk=8.6.13
-  - tokenizers=0.20.1
-  - torchaudio=2.5.0
-  - torchvision=0.20.0
-  - tqdm=4.66.5
-  - transformers=4.45.2
-  - typing-extensions=4.11.0
+  - torchaudio=2.3.0
+  - torchtriton=2.3.0
+  - torchvision=0.18.0
   - typing_extensions=4.11.0
-  - tzdata=2024b
-  - urllib3=2.2.3
-  - wheel=0.44.0
+  - urllib3=2.2.1
+  - wheel=0.43.0
   - xorg-libxau=1.0.11
-  - xorg-libxdmcp=1.1.5
-  - xxhash=0.8.0
-  - xz=5.4.6
+  - xorg-libxdmcp=1.1.3
+  - xz=5.2.6
   - yaml=0.2.5
-  - yarl=1.11.0
-  - zstd=1.5.6
+  - zlib=1.2.13
+  - zstd=1.5.5
   - pip:
+      - absl-py==2.1.0
       - accelerate==1.0.1
-      - bitsandbytes==0.42.0
+      - aiohappyeyeballs==2.4.3
+      - aiohttp==3.10.10
+      - aiosignal==1.3.1
+      - async-timeout==4.0.3
+      - attrs==24.2.0
+      - bitsandbytes==0.44.1
       - click==8.1.7
+      - datasets==3.0.2
+      - dill==0.3.8
       - docker-pycreds==0.4.0
+      - frozenlist==1.5.0
+      - fsspec==2024.9.0
       - gitdb==4.0.11
       - gitpython==3.1.43
+      - h5py==3.12.1
+      - huggingface-hub==0.26.1
       - joblib==1.4.2
+      - markdown-it-py==3.0.0
+      - mdurl==0.1.2
+      - ml-dtypes==0.5.0
+      - multidict==6.1.0
+      - multiprocess==0.70.16
+      - packaging==24.1
+      - pandas==2.2.3
       - peft==0.13.2
       - platformdirs==4.3.6
-      - protobuf==5.28.2
+      - propcache==0.2.0
+      - protobuf==5.28.3
       - psutil==6.1.0
+      - pyarrow==17.0.0
+      - pygments==2.18.0
+      - pyparsing==3.2.0
+      - python-dateutil==2.9.0.post0
+      - pytz==2024.2
+      - regex==2024.9.11
+      - requests==2.32.3
+      - rich==13.9.3
+      - safetensors==0.4.5
       - scikit-learn==1.5.2
       - scipy==1.14.1
       - sentry-sdk==2.17.0
       - setproctitle==1.3.3
+      - six==1.16.0
       - smmap==5.0.1
-      - sympy==1.13.1
       - threadpoolctl==3.5.0
+      - tokenizers==0.19.1
+      - tqdm==4.66.5
+      - transformers==4.41.1
+      - tzdata==2024.2
       - wandb==0.18.5
+      - xxhash==3.5.0
+      - yarl==1.16.0
