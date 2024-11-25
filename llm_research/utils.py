@@ -227,6 +227,7 @@ class CustomBackboneHead(transformers.PreTrainedModel):
 def get_model(
     name,
     tokenizer,
+    ## TODO: CHANGE THE SIZE BACK/CREATE WAY TO PASS IN
     size="original",
     pretrained=True,
     task="lm",
@@ -272,6 +273,14 @@ def get_model(
         ):
             backbone_config.max_position_embeddings = max_length
 
+    if size == "small":
+        backbone_config.num_hidden_layers = 4  # Reduce to 4 layers
+        backbone_config.hidden_size = 256 #1280 #256  # Reduce hidden size to 256
+        backbone_config.num_attention_heads = 4  # 4 attention heads
+        backbone_config.intermediate_size = 512  # Feedforward size
+        backbone_config.hidden_act = "gelu"  # Activation function
+        backbone_config.max_position_embeddings = max_length or 128  # Shorter max length
+
     backbone_config.eos_token_id = tokenizer.eos_token_id
     backbone_config.bos_token_id = tokenizer.bos_token_id
     backbone_config.pad_token_id = tokenizer.pad_token_id
@@ -297,6 +306,9 @@ def get_model(
         in_features = backbone_config.hidden_size
     else:
         raise NotImplementedError()
+
+    # TODO: Remove this and make it extensible after 
+    # in_features = backbone_config.hidden_size
 
     config = CustomConfig(
         backbone_config=backbone_config,

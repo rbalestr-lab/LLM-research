@@ -196,6 +196,15 @@ if __name__ == "__main__":
             param.requires_grad = True
     params = [p for p in model.parameters() if p.requires_grad]
 
+
+    # Checking to make sure the model is actually pruned
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    
+    print(f"Total parameters: {total_params:,}")
+    print(f"Trainable parameters: {trainable_params:,}")
+
+
     # optimizer = torch.optim.AdamW(
     #     params, weight_decay=args.weight_decay, lr=args.learning_rate
     # )
@@ -213,6 +222,7 @@ if __name__ == "__main__":
         warmup_init=False,
     )
 
+    #TODO: Reset to the number of GPUS you are using (8 was there before)
     assert args.batch_size >= (8 * args.per_device_batch_size)
     n_accumulation = args.batch_size // (8 * args.per_device_batch_size)
 
