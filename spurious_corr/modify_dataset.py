@@ -1,11 +1,13 @@
 import random
 from datasets import Dataset
+from datasets import concatenate_datasets
 import transformers
 import llm_research
 from termcolor import colored  # For colored output
 import re
 
 def inject_spurious_text(
+    label_to_modify,
     dataset, 
     proportion, 
     spurious_text_generator, 
@@ -17,6 +19,7 @@ def inject_spurious_text(
     the proportion of tokens that are spurious.
     
     Args:
+        label_to_modify (int): The label of the text to modify.
         dataset (Dataset): The dataset containing the text data.
         proportion (float): Proportion of texts to inject spurious text into (0 to 1).
         spurious_text_generator (callable): A function that generates spurious text.
@@ -51,7 +54,10 @@ def inject_spurious_text(
             example["text"] = " ".join(words)
         return example
 
-    return dataset.map(modify_text)
+    dataset_to_modify = dataset.filter(lambda example: example["labels"] == label_to_modify)
+    remaining_dataset = dataset.filter(lambda example: example["labels"] != label_to_modify)
+    modified_dataset = dataset_to_modify.map(modify_text)
+    return concatenate_datasets([modified_dataset, remaining_dataset])
 
 def spurious_date_generator():
     year = random.randint(1900, 2100)
@@ -101,20 +107,20 @@ def main():
     dataset = "imdb"
     data = llm_research.data.from_name(dataset)
     train_dataset, test_dataset = data["train"], data["test"]
-
-    filepath = "countries.txt"
-    filepath = "colors.txt"
-    # spurious_text_generator = spurious_date_generator
-    spurious_text_generator = spurious_text_from_file_generator(filepath)
-    # highlighter = highlight_dates
-    highlighter = highlight_from_file(filepath)
+    filepath = "/Users/pradyut/LLM_Research/LLM-research/spurious_corr/countries.txt"
+    filepath = "/Users/pradyut/LLM_Research/LLM-research/spurious_corr/colors.txt"
+    spurious_text_generator = spurious_date_generator
+    # spurious_text_generator = spurious_text_from_file_generator(filepath)
+    highlighter = highlight_dates
+    #highlighter = highlight_from_file(filepath)
 
     modified_data = inject_spurious_text(
+        label_to_modify=0,
         dataset=train_dataset,
         proportion=1,
         spurious_text_generator=spurious_text_generator,
         location="random",
-        spurious_proportion=0.1
+        # spurious_proportion=0.1
     )
 
     pretty_print(modified_data, 5, highlighter)
