@@ -18,10 +18,14 @@ from typing import List, Optional, Tuple, Union
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
 
+
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import spurious_corr
 
+from spurious_corr.modify_dataset import inject_spurious_text
+from spurious_corr.modify_dataset import spurious_date_generator
 
 
 
@@ -98,6 +102,22 @@ if __name__ == "__main__":
     from_gcs = None if args.from_gcs == "none" else args.from_gcs
     data = llm_research.data.from_name(args.dataset, from_gcs=from_gcs)
     train_dataset, test_dataset = data["train"], data["test"]
+
+    # injecting spurious corr into the dataset
+
+    # TODO: Add a parser arguemnt
+   
+
+    spurious_text_generator = spurious_corr.modify_dataset.spurious_date_generator
+    train_dataset = spurious_corr.modify_dataset.inject_spurious_text(
+        label_to_modify=0,
+        dataset=train_dataset,
+        proportion=1,
+        spurious_text_generator=spurious_text_generator,
+        location="end",
+        # spurious_proportion=0.1
+    )
+
 
     if args.pretrained_tokenizer:
         tokenizer = llm_research.tokenizer.from_model(
