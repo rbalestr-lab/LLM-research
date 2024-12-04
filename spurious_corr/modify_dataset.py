@@ -107,8 +107,8 @@ def main():
     dataset = "imdb"
     data = llm_research.data.from_name(dataset)
     train_dataset, test_dataset = data["train"], data["test"]
-    filepath = "/Users/pradyut/LLM_Research/LLM-research/spurious_corr/countries.txt"
-    filepath = "/Users/pradyut/LLM_Research/LLM-research/spurious_corr/colors.txt"
+    filepath = "countries.txt"
+    filepath = "colors.txt"
     spurious_text_generator = spurious_date_generator
     # spurious_text_generator = spurious_text_from_file_generator(filepath)
     highlighter = highlight_dates
