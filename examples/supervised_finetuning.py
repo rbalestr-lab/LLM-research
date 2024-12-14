@@ -1,6 +1,7 @@
 import os
 import transformers
 import torch
+import datetime
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -312,11 +313,15 @@ if __name__ == "__main__":
     args.training_parameters = learnable
 
     if int(os.environ["LOCAL_RANK"]) == 0:
+        
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
         wandb.init(
             # project="supervised_finetuning",
             project="8k_corrected_finetuning",
             config=args,
             group=f"dataset={args.dataset}-backbone={args.backbone}",
+            name=f"Fine-tuning {args.backbone} on {args.dataset} [{timestamp}]",
         )
     trainer.train()
 
