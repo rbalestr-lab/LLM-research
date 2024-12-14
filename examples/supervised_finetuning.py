@@ -19,15 +19,17 @@ from typing import List, Optional, Tuple, Union
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
 
-
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-import spurious_corr
 
+
+import spurious_corr
 from spurious_corr.modify_dataset import inject_spurious_text
 from spurious_corr.modify_dataset import spurious_date_generator
 
+import loraexp
+from loraexp.loraexp_lib import LoraConfigExp, get_peft_model_exp
 
 
 import llm_research
@@ -148,6 +150,7 @@ if __name__ == "__main__":
     )
 
     if args.lora_rank:
+        print("HERE Lora Rank")
         if args.lora0 != 0 or args.mixture != 0 or args.superlinear != "none":
             config = LoraConfigExp(
                 r=args.lora_rank,
@@ -321,7 +324,7 @@ if __name__ == "__main__":
             project="8k_corrected_finetuning",
             config=args,
             group=f"dataset={args.dataset}-backbone={args.backbone}",
-            name=f"Fine-tuning {args.backbone} on {args.dataset} [{timestamp}]",
+            name=f"Fine-tuning {args.backbone} on {args.dataset} [{timestamp}], Lora:{args.lora_rank > 0}, with Lora Rank: {args.lora_rank}",
         )
     trainer.train()
 
