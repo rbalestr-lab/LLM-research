@@ -94,6 +94,8 @@ if __name__ == "__main__":
     parser.add_argument("--superlinear", type=str, default="none")
     parser.add_argument("--scaling-gamma", type=int, default=0)
     parser.add_argument("--use-dora", type=int, default=0)
+    parser.add_argument("--use-spurious", type=lambda x: True if x == "1" else False)
+    parser.add_argument("--spurious-location", type=str, default="random")
     args = parser.parse_args()
 
     if args.pretrained_tokenizer is None:
@@ -110,16 +112,21 @@ if __name__ == "__main__":
 
     # TODO: Add a parser arguemnt
    
+    if args.use_spurious:
+        print("Using Spurious Correlation")
+        spurious_text_generator = spurious_corr.modify_dataset.spurious_date_generator
+        
+        # make sure that the location is one of the acceptable locations
+        assert (args.spurious_location == "random") or (args.spurious_location == "end") or (args.spurious_location == "beginning")
 
-    spurious_text_generator = spurious_corr.modify_dataset.spurious_date_generator
-    train_dataset = spurious_corr.modify_dataset.inject_spurious_text(
-        label_to_modify=0,
-        dataset=train_dataset,
-        proportion=1,
-        spurious_text_generator=spurious_text_generator,
-        location="end",
-        # spurious_proportion=0.1
-    )
+        train_dataset = spurious_corr.modify_dataset.inject_spurious_text(
+            label_to_modify=0,
+            dataset=train_dataset,
+            proportion=1,
+            spurious_text_generator=spurious_text_generator,
+            location=args.spurious_location,
+            # spurious_proportion=0.1
+        )
 
 
     if args.pretrained_tokenizer:
@@ -324,7 +331,8 @@ if __name__ == "__main__":
             project="8k_corrected_finetuning",
             config=args,
             group=f"dataset={args.dataset}-backbone={args.backbone}",
-            name=f"Fine-tuning {args.backbone} on {args.dataset} [{timestamp}], Lora:{args.lora_rank > 0}, with Lora Rank: {args.lora_rank}",
+            name=f"{args.backbone} on {args.dataset} [{timestamp}], Lora: {args.lora_rank > 0} \
+                with Lora Rank {args.lora_rank}, Using Spurious Correlation: {args.use_spurious} at location {args.spurious_location}",
         )
     trainer.train()
 
