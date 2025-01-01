@@ -1,0 +1,80 @@
+# config.yaml
+defaults:
+  - override hydra/launcher: submitit_slurm
+  - _self_
+
+hydra:
+  sweep:
+    dir: ./multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}
+  run:
+    dir: ./multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  job:
+    chdir: False
+  launcher:
+    gpus_per_node: ${trainer.hardware.world_size}
+    tasks_per_node: ${trainer.hardware.world_size}
+    cpus_per_task: 32
+    timeout_min: 1000
+    partition: gpu
+trainer:
+  loss:
+    with_bias: true
+  hardware:
+    world_size: 2  # You can set this based on the number of GPUs you are using
+
+params:
+  dataset: rotten_tomatoes
+  per_device_batch_size: 8
+  freeze: 0
+  pretrained: 0
+  use_spurious: False
+  backbone: apple/OpenELM-450M
+  lora_rank: 0
+  training_steps: 200
+  batch_size: 64
+  pretrained_tokenizer:  None
+  weight_decay: 1e-5
+  learning_rate: 1e-4
+  dropout: 0
+  mixup: 0
+  vocab_size: None
+  max_length: 1024
+  label_smoothing: 0
+  from_gcs: none
+  eval_steps: 20
+  mixture: 0
+  lora0: 0
+  superlinear: none
+  scaling_gamma: 0
+  use_dora: 0
+  spurious_location: random
+  total_parameters: 0
+  training_parameters: 0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+
+# # @package hydra.launcher
+# _target_: hydra_plugins.hydra_submitit_launcher.submitit_launcher.LocalLauncher
+# submitit_folder: ${hydra.sweep.dir}/.submitit/%j
+# timeout_min: 60
+# cpus_per_task: 1
+# gpus_per_node: 0
+# tasks_per_node: 1
+# mem_gb: 4
+# nodes: 1
+# name: ${hydra.job.name}

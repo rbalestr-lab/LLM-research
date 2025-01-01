@@ -17,12 +17,18 @@ import math
 import warnings
 from typing import List, Optional, Tuple, Union
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+from dataclasses import asdict
+
 
 
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+import submitit
+import hydra
+from omegaconf import DictConfig
+from omegaconf import OmegaConf
 
 import spurious_corr
 from spurious_corr.modify_dataset import inject_spurious_text
@@ -60,82 +66,50 @@ LARGE_MODELS = [
     "apple/OpenELM-3B",
     ]
 
+@hydra.main(config_path=".", config_name="hydra", version_base="1.1")
+def main(cfg: DictConfig):
+    # Set up your model training here using the passed configuration (cfg)
+    print(f"Using configuration: {cfg}")
 
-if __name__ == "__main__":
-    parser = ArgumentParser()
-    parser.add_argument(
-        "--backbone",
-        choices=llm_research.MODELS,
-        default="apple/OpenELM-450M",
-    )
-    parser.add_argument("--freeze", type=lambda x: True if x == "1" else False)
-    parser.add_argument("--lora-rank", type=int, default=0)
-    parser.add_argument(
-        "--dataset",
-        default="rotten_tomatoes",
-        choices=llm_research.data.NAMES,
-    )
-    parser.add_argument("--training-steps", type=int, default=200)
-    parser.add_argument("--per-device-batch-size", type=int, default=8)
-    parser.add_argument("--batch-size", type=int, default=64)
-    parser.add_argument("--pretrained", type=lambda x: True if x == "1" else False)
-    parser.add_argument("--pretrained-tokenizer", type=lambda x: True if x == "1" else False, default=None)
-    parser.add_argument("--weight-decay", type=float, default=1e-5)
-    parser.add_argument("--learning-rate", type=float, default=1e-4)
-    parser.add_argument("--dropout", type=float, default=0)
-    parser.add_argument("--mixup", type=float, default=0)
-    parser.add_argument("--vocab-size", type=int, default=None)
-    parser.add_argument("--max-length", type=int, default=1024)
-    parser.add_argument("--label-smoothing", type=float, default=0)
-    parser.add_argument("--from-gcs", type=str, default="none")
-    parser.add_argument("--eval-steps", type=int, default=20)
-    parser.add_argument("--mixture", type=int, default=0)
-    parser.add_argument("--lora0", type=int, default=0)
-    parser.add_argument("--superlinear", type=str, default="none")
-    parser.add_argument("--scaling-gamma", type=int, default=0)
-    parser.add_argument("--use-dora", type=int, default=0)
-    parser.add_argument("--use-spurious", type=lambda x: True if x == "1" else False)
-    parser.add_argument("--spurious-location", type=str, default="random")
-    args = parser.parse_args()
+    # backbone = cfg.backbone
+    training_steps = cfg.params.training_steps
+    batch_size = cfg.params.batch_size
 
-    if args.pretrained_tokenizer is None:
-        args.pretrained_tokenizer = args.pretrained
+    if cfg.params.pretrained_tokenizer is None:
+        cfg.params.pretrained_tokenizer = cfg.params.pretrained
 
-    if not args.pretrained:
-        assert args.vocab_size is not None
+    if not cfg.params.pretrained:
+        assert cfg.params.vocab_size is not None
 
-    from_gcs = None if args.from_gcs == "none" else args.from_gcs
-    data = llm_research.data.from_name(args.dataset, from_gcs=from_gcs)
+    # Load dataset, model, optimizer, and trainer as you did before
+    from_gcs = None if cfg.params.from_gcs == "none" else cfg.params.from_gcs
+    data = llm_research.data.from_name(cfg.params.dataset, from_gcs=from_gcs)
     train_dataset, test_dataset = data["train"], data["test"]
 
-    # injecting spurious corr into the dataset
-
-    # TODO: Add a parser arguemnt
-   
-    if args.use_spurious:
+    if cfg.params.use_spurious:
         print("Using Spurious Correlation")
         spurious_text_generator = spurious_corr.modify_dataset.spurious_date_generator
         
         # make sure that the location is one of the acceptable locations
-        assert (args.spurious_location == "random") or (args.spurious_location == "end") or (args.spurious_location == "beginning")
+        assert (cfg.params.spurious_location == "random") or (cfg.params.spurious_location == "end") or (cfg.params.spurious_location == "beginning")
 
         train_dataset = spurious_corr.modify_dataset.inject_spurious_text(
             label_to_modify=0,
             dataset=train_dataset,
             proportion=1,
             spurious_text_generator=spurious_text_generator,
-            location=args.spurious_location,
+            location=cfg.params.spurious_location,
             # spurious_proportion=0.1
         )
 
 
-    if args.pretrained_tokenizer:
+    if cfg.params.pretrained_tokenizer:
         tokenizer = llm_research.tokenizer.from_model(
-            args.backbone, from_gcs=from_gcs
+            cfg.params.backbone, from_gcs=from_gcs
         )
     else:
         tokenizer = llm_research.tokenizer.from_data(
-            train_dataset, variant="BPE", vocab_size=args.vocab_size
+            train_dataset, variant="BPE", vocab_size=cfg.params.vocab_size
         )
 
     print(f"Tokenizer vocab_size: {len(tokenizer.vocab)}")
@@ -143,52 +117,52 @@ if __name__ == "__main__":
     num_classes = int(np.max(train_dataset["labels"]) + 1)
 
     model = llm_research.utils.get_model(
-        args.backbone,
+        cfg.params.backbone,
         tokenizer,
-        pretrained=args.pretrained,
+        pretrained=cfg.params.pretrained,
         task="ft",
         num_classes=num_classes,
-        dropout=args.dropout,
-        mixup=args.mixup,
-        label_smoothing=args.label_smoothing,
-        torch_dtype=torch.float32 if args.backbone not in LARGE_MODELS else torch.bfloat16,
-        max_length=args.max_length,
+        dropout=cfg.params.dropout,
+        mixup=cfg.params.mixup,
+        label_smoothing=cfg.params.label_smoothing,
+        torch_dtype=torch.float32 if cfg.params.backbone not in LARGE_MODELS else torch.bfloat16,
+        max_length=cfg.params.max_length,
         from_gcs=from_gcs,
     )
 
-    if args.lora_rank:
+    if cfg.params.lora_rank:
         print("HERE Lora Rank")
-        if args.lora0 != 0 or args.mixture != 0 or args.superlinear != "none":
+        if cfg.params.lora0 != 0 or cfg.params.mixture != 0 or cfg.params.superlinear != "none":
             config = LoraConfigExp(
-                r=args.lora_rank,
-                lora_alpha=args.lora_rank,
-                target_modules=llm_research.utils.name_to_lora(args.backbone),
+                r=cfg.params.lora_rank,
+                lora_alpha=cfg.params.lora_rank,
+                target_modules=llm_research.utils.name_to_lora(cfg.params.backbone),
                 bias="none",
                 lora_dropout=0.05,
                 task_type="CAUSAL_LM",
-                use_lora0=args.lora0,
-                m=args.mixture if args.mixture != 0 else None,
-                superlinear=args.superlinear if args.superlinear != "none" else None,
-                use_scaling_gamma=args.scaling_gamma,
+                use_lora0=cfg.params.lora0,
+                m=cfg.params.mixture if cfg.params.mixture != 0 else None,
+                superlinear=cfg.params.superlinear if cfg.params.superlinear != "none" else None,
+                use_scaling_gamma=cfg.params.scaling_gamma,
             )
             print(config)
             model.backbone.requires_grad_(False)
             model = get_peft_model_exp(model, config)
         else:
             config = LoraConfig(
-                r=args.lora_rank,
-                lora_alpha=args.lora_rank,
-                target_modules=llm_research.utils.name_to_lora(args.backbone),
+                r=cfg.params.lora_rank,
+                lora_alpha=cfg.params.lora_rank,
+                target_modules=llm_research.utils.name_to_lora(cfg.params.backbone),
                 bias="none",
                 lora_dropout=0.05,
                 task_type="CAUSAL_LM",
-                use_dora=args.use_dora,
+                use_dora=cfg.params.use_dora,
             )
             print(config)
             model.backbone.requires_grad_(False)
             model = get_peft_model(model, config)
-    elif args.freeze:
-        assert args.lora_rank == 0
+    elif cfg.params.freeze:
+        assert cfg.params.lora_rank == 0
         model.backbone.requires_grad_(False)
     else:
         model.requires_grad_(True)
@@ -200,7 +174,7 @@ if __name__ == "__main__":
             examples["text"],
             truncation=True,
             padding="max_length",
-            max_length=args.max_length,
+            max_length=cfg.params.max_length,
         ),
         batched=True,
     )
@@ -213,7 +187,7 @@ if __name__ == "__main__":
             examples["text"],
             truncation=True,
             padding="max_length",
-            max_length=args.max_length,
+            max_length=cfg.params.max_length,
         ),
         batched=True,
     )
@@ -242,42 +216,42 @@ if __name__ == "__main__":
 
     optimizer = transformers.Adafactor(
         params,
-        lr=args.learning_rate,
+        lr=cfg.params.learning_rate,
         eps=(1e-30, 1e-3),
         clip_threshold=1.0,
         decay_rate=-0.8,
         beta1=None,
-        weight_decay=args.weight_decay,
+        weight_decay=cfg.params.weight_decay,
         relative_step=False,
         scale_parameter=False,
         warmup_init=False,
     )
 
     #TODO: Reset to the number of GPUS you are using (8 was there before)
-    assert args.batch_size >= (8 * args.per_device_batch_size)
-    n_accumulation = args.batch_size // (8 * args.per_device_batch_size)
+    assert cfg.params.batch_size >= (8 * cfg.params.per_device_batch_size)
+    n_accumulation = cfg.params.batch_size // (8 * cfg.params.per_device_batch_size)
 
     scheduler = transformers.get_cosine_schedule_with_warmup(
         optimizer,
-        num_warmup_steps=int(0.05 * args.training_steps),
-        num_training_steps=args.training_steps * n_accumulation,
+        num_warmup_steps=int(0.05 * cfg.params.training_steps),
+        num_training_steps=cfg.params.training_steps * n_accumulation,
     )
     print("---- OPTIMIZER")
     print(optimizer)
 
     training_args = TrainingArguments(
-        output_dir=f"~/supervised_finetuning/{args.dataset}/{args.backbone}/outputs",
-        per_device_train_batch_size=args.per_device_batch_size,
-        per_device_eval_batch_size=args.per_device_batch_size,
+        output_dir=f"~/supervised_finetuning/{cfg.params.dataset}/{cfg.params.backbone}/outputs",
+        per_device_train_batch_size=cfg.params.per_device_batch_size,
+        per_device_eval_batch_size=cfg.params.per_device_batch_size,
         gradient_accumulation_steps=n_accumulation,
-        max_steps=args.training_steps * n_accumulation,
+        max_steps=cfg.params.training_steps * n_accumulation,
         max_grad_norm=1,
         logging_steps=5,
-        logging_dir=f"~/supervised_finetuning/{args.dataset}/{args.backbone}/logs",
+        logging_dir=f"~/supervised_finetuning/{cfg.params.dataset}/{cfg.params.backbone}/logs",
         #        save_steps=100,
         eval_accumulation_steps=1,
         eval_strategy="steps",
-        eval_steps=args.eval_steps,
+        eval_steps=cfg.params.eval_steps,
         dataloader_num_workers=2,
         gradient_checkpointing=False,
         report_to="wandb",
@@ -313,30 +287,31 @@ if __name__ == "__main__":
         if p.requires_grad:
             learnable += torch.numel(p)
     print("Model:")
-    print(f"\t-name: {args.backbone}")
+    print(f"\t-name: {cfg.params.backbone}")
     print(f"\t-total parameters: {total}")
     print(f"\t-learnable parameters: {learnable}")
     print(f"\t-trainable parameters (HF): {trainer.get_num_trainable_parameters()}")
     print(f"\t-dtype={model.dtype}")
 
-    args.total_parameters = total
-    args.training_parameters = learnable
+    cfg.params.total_parameters = total
+    cfg.params.training_parameters = learnable
 
     if int(os.environ["LOCAL_RANK"]) == 0:
         
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-
+        
+        print(type(cfg))
         wandb.init(
             # project="supervised_finetuning",
             project="8k_corrected_finetuning",
-            config=args,
-            group=f"dataset={args.dataset}-backbone={args.backbone}",
-            name=f"{args.backbone} on {args.dataset} [{timestamp}], Lora: {args.lora_rank > 0} \
-                with Lora Rank {args.lora_rank}, Using Spurious Correlation: {args.use_spurious} at location {args.spurious_location}",
+            config=OmegaConf.to_container(cfg.params, resolve=True),
+            group=f"dataset={cfg.params.dataset}-backbone={cfg.params.backbone}",
+            name=f"{cfg.params.backbone} on {cfg.params.dataset} [{timestamp}], Lora: {cfg.params.lora_rank > 0} \
+                with Lora Rank {cfg.params.lora_rank}, Using Spurious Correlation: {cfg.params.use_spurious} at location {cfg.params.spurious_location}",
         )
     trainer.train()
 
-    if args.scaling_gamma:
+    if cfg.params.scaling_gamma:
         beta_list = []
         for param in model.parameters():
             if param.shape == torch.Size([1, 1]):
@@ -349,3 +324,297 @@ if __name__ == "__main__":
 #
 #    if int(os.environ["LOCAL_RANK"]) == 0:
 #        wandb.log(metrics)
+
+
+
+if __name__ == "__main__":
+    main()
+
+# if __name__ == "__main__":
+#     parser = ArgumentParser()
+#     parser.add_argument(
+#         "--backbone",
+#         choices=llm_research.MODELS,
+#         default="apple/OpenELM-450M",
+#     )
+#     parser.add_argument("--freeze", type=lambda x: True if x == "1" else False)
+#     parser.add_argument("--lora-rank", type=int, default=0)
+#     parser.add_argument(
+#         "--dataset",
+#         default="rotten_tomatoes",
+#         choices=llm_research.data.NAMES,
+#     )
+#     parser.add_argument("--training-steps", type=int, default=200)
+#     parser.add_argument("--per-device-batch-size", type=int, default=8)
+#     parser.add_argument("--batch-size", type=int, default=64)
+#     parser.add_argument("--pretrained", type=lambda x: True if x == "1" else False)
+#     parser.add_argument("--pretrained-tokenizer", type=lambda x: True if x == "1" else False, default=None)
+#     parser.add_argument("--weight-decay", type=float, default=1e-5)
+#     parser.add_argument("--learning-rate", type=float, default=1e-4)
+#     parser.add_argument("--dropout", type=float, default=0)
+#     parser.add_argument("--mixup", type=float, default=0)
+#     parser.add_argument("--vocab-size", type=int, default=None)
+#     parser.add_argument("--max-length", type=int, default=1024)
+#     parser.add_argument("--label-smoothing", type=float, default=0)
+#     parser.add_argument("--from-gcs", type=str, default="none")
+#     parser.add_argument("--eval-steps", type=int, default=20)
+#     parser.add_argument("--mixture", type=int, default=0)
+#     parser.add_argument("--lora0", type=int, default=0)
+#     parser.add_argument("--superlinear", type=str, default="none")
+#     parser.add_argument("--scaling-gamma", type=int, default=0)
+#     parser.add_argument("--use-dora", type=int, default=0)
+#     parser.add_argument("--use-spurious", type=lambda x: True if x == "1" else False)
+#     parser.add_argument("--spurious-location", type=str, default="random")
+#     args = parser.parse_args()
+
+#     if args.pretrained_tokenizer is None:
+#         args.pretrained_tokenizer = args.pretrained
+
+#     if not args.pretrained:
+#         assert args.vocab_size is not None
+
+#     from_gcs = None if args.from_gcs == "none" else args.from_gcs
+#     data = llm_research.data.from_name(args.dataset, from_gcs=from_gcs)
+#     train_dataset, test_dataset = data["train"], data["test"]
+
+#     # injecting spurious corr into the dataset
+
+#     # TODO: Add a parser arguemnt
+   
+#     if args.use_spurious:
+#         print("Using Spurious Correlation")
+#         spurious_text_generator = spurious_corr.modify_dataset.spurious_date_generator
+        
+#         # make sure that the location is one of the acceptable locations
+#         assert (args.spurious_location == "random") or (args.spurious_location == "end") or (args.spurious_location == "beginning")
+
+#         train_dataset = spurious_corr.modify_dataset.inject_spurious_text(
+#             label_to_modify=0,
+#             dataset=train_dataset,
+#             proportion=1,
+#             spurious_text_generator=spurious_text_generator,
+#             location=args.spurious_location,
+#             # spurious_proportion=0.1
+#         )
+
+
+#     if args.pretrained_tokenizer:
+#         tokenizer = llm_research.tokenizer.from_model(
+#             args.backbone, from_gcs=from_gcs
+#         )
+#     else:
+#         tokenizer = llm_research.tokenizer.from_data(
+#             train_dataset, variant="BPE", vocab_size=args.vocab_size
+#         )
+
+#     print(f"Tokenizer vocab_size: {len(tokenizer.vocab)}")
+
+#     num_classes = int(np.max(train_dataset["labels"]) + 1)
+
+#     model = llm_research.utils.get_model(
+#         args.backbone,
+#         tokenizer,
+#         pretrained=args.pretrained,
+#         task="ft",
+#         num_classes=num_classes,
+#         dropout=args.dropout,
+#         mixup=args.mixup,
+#         label_smoothing=args.label_smoothing,
+#         torch_dtype=torch.float32 if args.backbone not in LARGE_MODELS else torch.bfloat16,
+#         max_length=args.max_length,
+#         from_gcs=from_gcs,
+#     )
+
+#     if args.lora_rank:
+#         print("HERE Lora Rank")
+#         if args.lora0 != 0 or args.mixture != 0 or args.superlinear != "none":
+#             config = LoraConfigExp(
+#                 r=args.lora_rank,
+#                 lora_alpha=args.lora_rank,
+#                 target_modules=llm_research.utils.name_to_lora(args.backbone),
+#                 bias="none",
+#                 lora_dropout=0.05,
+#                 task_type="CAUSAL_LM",
+#                 use_lora0=args.lora0,
+#                 m=args.mixture if args.mixture != 0 else None,
+#                 superlinear=args.superlinear if args.superlinear != "none" else None,
+#                 use_scaling_gamma=args.scaling_gamma,
+#             )
+#             print(config)
+#             model.backbone.requires_grad_(False)
+#             model = get_peft_model_exp(model, config)
+#         else:
+#             config = LoraConfig(
+#                 r=args.lora_rank,
+#                 lora_alpha=args.lora_rank,
+#                 target_modules=llm_research.utils.name_to_lora(args.backbone),
+#                 bias="none",
+#                 lora_dropout=0.05,
+#                 task_type="CAUSAL_LM",
+#                 use_dora=args.use_dora,
+#             )
+#             print(config)
+#             model.backbone.requires_grad_(False)
+#             model = get_peft_model(model, config)
+#     elif args.freeze:
+#         assert args.lora_rank == 0
+#         model.backbone.requires_grad_(False)
+#     else:
+#         model.requires_grad_(True)
+
+
+
+#     train_dataset = train_dataset.map(
+#         lambda examples: tokenizer(
+#             examples["text"],
+#             truncation=True,
+#             padding="max_length",
+#             max_length=args.max_length,
+#         ),
+#         batched=True,
+#     )
+#     train_dataset.set_format(
+#         type="torch", columns=["input_ids", "attention_mask", "labels"]
+#     )
+
+#     test_dataset = test_dataset.map(
+#         lambda examples: tokenizer(
+#             examples["text"],
+#             truncation=True,
+#             padding="max_length",
+#             max_length=args.max_length,
+#         ),
+#         batched=True,
+#     )
+#     test_dataset.set_format(
+#         type="torch", columns=["input_ids", "attention_mask", "labels"]
+#     )
+
+#     # Force setting the `scaling_gamma` to be trainable.
+#     for param in model.parameters():
+#         if param.shape == torch.Size([1, 1]):
+#             param.requires_grad = True
+#     params = [p for p in model.parameters() if p.requires_grad]
+
+
+#     # Checking to make sure the model is actually pruned
+#     total_params = sum(p.numel() for p in model.parameters())
+#     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    
+#     print(f"Total parameters: {total_params:,}")
+#     print(f"Trainable parameters: {trainable_params:,}")
+
+
+#     # optimizer = torch.optim.AdamW(
+#     #     params, weight_decay=args.weight_decay, lr=args.learning_rate
+#     # )
+
+#     optimizer = transformers.Adafactor(
+#         params,
+#         lr=args.learning_rate,
+#         eps=(1e-30, 1e-3),
+#         clip_threshold=1.0,
+#         decay_rate=-0.8,
+#         beta1=None,
+#         weight_decay=args.weight_decay,
+#         relative_step=False,
+#         scale_parameter=False,
+#         warmup_init=False,
+#     )
+
+#     #TODO: Reset to the number of GPUS you are using (8 was there before)
+#     assert args.batch_size >= (8 * args.per_device_batch_size)
+#     n_accumulation = args.batch_size // (8 * args.per_device_batch_size)
+
+#     scheduler = transformers.get_cosine_schedule_with_warmup(
+#         optimizer,
+#         num_warmup_steps=int(0.05 * args.training_steps),
+#         num_training_steps=args.training_steps * n_accumulation,
+#     )
+#     print("---- OPTIMIZER")
+#     print(optimizer)
+
+#     training_args = TrainingArguments(
+#         output_dir=f"~/supervised_finetuning/{args.dataset}/{args.backbone}/outputs",
+#         per_device_train_batch_size=args.per_device_batch_size,
+#         per_device_eval_batch_size=args.per_device_batch_size,
+#         gradient_accumulation_steps=n_accumulation,
+#         max_steps=args.training_steps * n_accumulation,
+#         max_grad_norm=1,
+#         logging_steps=5,
+#         logging_dir=f"~/supervised_finetuning/{args.dataset}/{args.backbone}/logs",
+#         #        save_steps=100,
+#         eval_accumulation_steps=1,
+#         eval_strategy="steps",
+#         eval_steps=args.eval_steps,
+#         dataloader_num_workers=2,
+#         gradient_checkpointing=False,
+#         report_to="wandb",
+#         overwrite_output_dir="True",
+#         save_strategy="no",
+#         load_best_model_at_end=False,
+#         fp16=False,
+#     )
+
+#     model.config.use_cache = False
+
+#     def compute_metrics(p):
+#         preds = p.predictions[0] if isinstance(p.predictions, tuple) else p.predictions
+#         argpreds = preds.argmax(1)
+#         acc = metrics.accuracy_score(p.label_ids, argpreds)
+#         bal_acc = metrics.balanced_accuracy_score(p.label_ids, argpreds)
+#         f1 = metrics.f1_score(p.label_ids, argpreds, average="weighted")
+#         return dict(accuracy=acc, balanced_accuracy=bal_acc, F1=f1)
+
+#     trainer = transformers.Trainer(
+#         model=model,
+#         train_dataset=train_dataset,
+#         eval_dataset=test_dataset,
+#         args=training_args,
+#         optimizers=(optimizer, scheduler),
+#         compute_metrics=compute_metrics,
+#     )
+
+#     total = 0
+#     learnable = 0
+#     for p in model.parameters():
+#         total += torch.numel(p)
+#         if p.requires_grad:
+#             learnable += torch.numel(p)
+#     print("Model:")
+#     print(f"\t-name: {args.backbone}")
+#     print(f"\t-total parameters: {total}")
+#     print(f"\t-learnable parameters: {learnable}")
+#     print(f"\t-trainable parameters (HF): {trainer.get_num_trainable_parameters()}")
+#     print(f"\t-dtype={model.dtype}")
+
+#     args.total_parameters = total
+#     args.training_parameters = learnable
+
+#     if int(os.environ["LOCAL_RANK"]) == 0:
+        
+#         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+#         wandb.init(
+#             # project="supervised_finetuning",
+#             project="8k_corrected_finetuning",
+#             config=args,
+#             group=f"dataset={args.dataset}-backbone={args.backbone}",
+#             name=f"{args.backbone} on {args.dataset} [{timestamp}], Lora: {args.lora_rank > 0} \
+#                 with Lora Rank {args.lora_rank}, Using Spurious Correlation: {args.use_spurious} at location {args.spurious_location}",
+#         )
+#     trainer.train()
+
+#     if args.scaling_gamma:
+#         beta_list = []
+#         for param in model.parameters():
+#             if param.shape == torch.Size([1, 1]):
+#                 beta_list.append(float(param))
+#         beta_arr = torch.nn.functional.relu(torch.tensor(beta_list)) + 0.001
+#         print(f" --> scaling_gamma: {torch.mean(0.01 / beta_arr)}")
+
+# #    metrics = trainer.evaluate(test_dataset)
+# #    print(metrics)
+# #
+# #    if int(os.environ["LOCAL_RANK"]) == 0:
+# #        wandb.log(metrics)
