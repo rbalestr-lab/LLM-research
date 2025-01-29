@@ -296,7 +296,7 @@ def main(cfg: DictConfig):
     cfg.params.total_parameters = total
     cfg.params.training_parameters = learnable
 
-    if int(os.environ["LOCAL_RANK"]) == 0:
+    if int(os.environ.get("LOCAL_RANK",0)) == 0:
         
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         

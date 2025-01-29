@@ -2,7 +2,6 @@
 defaults:
   - override hydra/launcher: submitit_slurm
   - _self_
-
 hydra:
   sweep:
     dir: ./multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
@@ -12,16 +11,18 @@ hydra:
   job:
     chdir: False
   launcher:
-    gpus_per_node: ${trainer.hardware.world_size}
-    tasks_per_node: ${trainer.hardware.world_size}
-    cpus_per_task: 32
+    gpus_per_node: 1
+    tasks_per_node: 1
+    cpus_per_task: 1
     timeout_min: 1000
     partition: gpu
+    mem_per_gpu: 32G
+    
 trainer:
   loss:
     with_bias: true
   hardware:
-    world_size: 2  # You can set this based on the number of GPUs you are using
+    world_size: 1  # You can set this based on the number of GPUs you are using
 
 params:
   dataset: rotten_tomatoes
@@ -51,30 +52,3 @@ params:
   spurious_location: random
   total_parameters: 0
   training_parameters: 0
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  
-
-
-# # @package hydra.launcher
-# _target_: hydra_plugins.hydra_submitit_launcher.submitit_launcher.LocalLauncher
-# submitit_folder: ${hydra.sweep.dir}/.submitit/%j
-# timeout_min: 60
-# cpus_per_task: 1
-# gpus_per_node: 0
-# tasks_per_node: 1
-# mem_gb: 4
-# nodes: 1
-# name: ${hydra.job.name}
