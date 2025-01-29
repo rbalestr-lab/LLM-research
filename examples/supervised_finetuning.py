@@ -66,10 +66,21 @@ LARGE_MODELS = [
     "apple/OpenELM-3B",
     ]
 
+# setting the seed for reproducibility
+def set_seed(seed: int):
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # For multi-GPU training
+    torch.backends.cudnn.deterministic = True  # Ensures deterministic behavior
+    torch.backends.cudnn.benchmark = False  # Disables optimization for non-deterministic algorithms
+
+
 @hydra.main(config_path=".", config_name="hydra", version_base="1.1")
 def main(cfg: DictConfig):
     # Set up your model training here using the passed configuration (cfg)
     print(f"Using configuration: {cfg}")
+
+    set_seed(cfg.params.seed)
 
     # backbone = cfg.backbone
     training_steps = cfg.params.training_steps
