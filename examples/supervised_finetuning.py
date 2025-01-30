@@ -18,6 +18,7 @@ import warnings
 from typing import List, Optional, Tuple, Union
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from dataclasses import asdict
+import copy
 
 
 
@@ -193,6 +194,20 @@ def main(cfg: DictConfig):
         type="torch", columns=["input_ids", "attention_mask", "labels"]
     )
 
+    # might want to add for the ability to choose where/what to use spurious on eval
+    # evaluate on both spurious data and regular data 
+    spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_date_generator
+    # generating the spurious testing dataset
+    test_dataset_spur = spurious_corr.modify_dataset.inject_spurious_text(
+        label_to_modify=0,
+        dataset=test_dataset,
+        proportion=1,
+        spurious_text_generator=spurious_text_generator_eval,
+        location=cfg.params.spurious_location,
+        # spurious_proportion=0.1
+    )
+
+
     test_dataset = test_dataset.map(
         lambda examples: tokenizer(
             examples["text"],
@@ -203,6 +218,19 @@ def main(cfg: DictConfig):
         batched=True,
     )
     test_dataset.set_format(
+        type="torch", columns=["input_ids", "attention_mask", "labels"]
+    )
+
+    test_dataset_spur = test_dataset_spur.map(
+        lambda examples: tokenizer(
+            examples["text"],
+            truncation=True,
+            padding="max_length",
+            max_length=cfg.params.max_length,
+        ),
+        batched=True,
+    )
+    test_dataset_spur.set_format(
         type="torch", columns=["input_ids", "attention_mask", "labels"]
     )
 
@@ -282,10 +310,13 @@ def main(cfg: DictConfig):
         f1 = metrics.f1_score(p.label_ids, argpreds, average="weighted")
         return dict(accuracy=acc, balanced_accuracy=bal_acc, F1=f1)
 
+    # create the dict to be able to eval on both Spurious and Non-Spurious Data
+    eval_datasets = {"Non-Spurious": test_dataset, "Spurious": test_dataset_spur}
+
     trainer = transformers.Trainer(
         model=model,
         train_dataset=train_dataset,
-        eval_dataset=test_dataset,
+        eval_dataset=eval_datasets,
         args=training_args,
         optimizers=(optimizer, scheduler),
         compute_metrics=compute_metrics,
