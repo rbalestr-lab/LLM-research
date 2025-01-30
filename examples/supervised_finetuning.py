@@ -72,8 +72,8 @@ def set_seed(seed: int):
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)  # For multi-GPU training
-    torch.backends.cudnn.deterministic = True  # Ensures deterministic behavior
-    torch.backends.cudnn.benchmark = False  # Disables optimization for non-deterministic algorithms
+    # torch.backends.cudnn.deterministic = True  # Ensures deterministic behavior
+    # torch.backends.cudnn.benchmark = False  # Disables optimization for non-deterministic algorithms
 
 
 @hydra.main(config_path=".", config_name="hydra", version_base="1.1")
