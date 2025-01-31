@@ -324,6 +324,8 @@ def main(cfg: DictConfig):
     test_dataset_spur_cat0, test_dataset_spur_cat1 = filter_categories(test_dataset_spur, 0)
     test_dataset_cat0, test_dataset_cat1 = filter_categories(test_dataset, 0)
 
+    # eval_datasets = {"NonSpuriousWhole": test_dataset, "SpuriousWhole": test_dataset_spur}
+
     eval_datasets = {"NonSpuriousWhole": test_dataset, "SpuriousWhole": test_dataset_spur,
      "SpuriousCat0": test_dataset_spur_cat0, "SpuriousCat1": test_dataset_spur_cat1,
      "NonSpurCat0": test_dataset_cat0, "NonSpurCat1": test_dataset_cat1 }
