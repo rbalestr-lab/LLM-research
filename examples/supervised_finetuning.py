@@ -75,6 +75,12 @@ def set_seed(seed: int):
     # torch.backends.cudnn.deterministic = True  # Ensures deterministic behavior
     # torch.backends.cudnn.benchmark = False  # Disables optimization for non-deterministic algorithms
 
+def filter_categories(dataset, first_label):
+    dataset_label0 = dataset.filter(lambda example: example["labels"] == first_label)
+    dataset_label1 = dataset.filter(lambda example: example["labels"] != first_label)
+
+    return (dataset_label0, dataset_label1)
+
 
 @hydra.main(config_path=".", config_name="hydra", version_base="1.1")
 def main(cfg: DictConfig):
@@ -194,6 +200,8 @@ def main(cfg: DictConfig):
         type="torch", columns=["input_ids", "attention_mask", "labels"]
     )
 
+    # create all the sets we will evaluate on --------------------------------------------------------------
+
     # might want to add for the ability to choose where/what to use spurious on eval
     # evaluate on both spurious data and regular data 
     spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_date_generator
@@ -206,7 +214,6 @@ def main(cfg: DictConfig):
         location=cfg.params.spurious_location,
         # spurious_proportion=0.1
     )
-
 
     test_dataset = test_dataset.map(
         lambda examples: tokenizer(
@@ -233,6 +240,9 @@ def main(cfg: DictConfig):
     test_dataset_spur.set_format(
         type="torch", columns=["input_ids", "attention_mask", "labels"]
     )
+
+    test_dataset_spur_cat0, test_dataset_spur_cat1 = filter_categories(test_dataset_spur, 0)
+    test_dataset_cat0, test_dataset_cat1 = filter_categories(test_dataset, 0)
 
     # Force setting the `scaling_gamma` to be trainable.
     for param in model.parameters():
@@ -311,7 +321,12 @@ def main(cfg: DictConfig):
         return dict(accuracy=acc, balanced_accuracy=bal_acc, F1=f1)
 
     # create the dict to be able to eval on both Spurious and Non-Spurious Data
-    eval_datasets = {"Non-Spurious": test_dataset, "Spurious": test_dataset_spur}
+    test_dataset_spur_cat0, test_dataset_spur_cat1 = filter_categories(test_dataset_spur, 0)
+    test_dataset_cat0, test_dataset_cat1 = filter_categories(test_dataset, 0)
+
+    eval_datasets = {"NonSpuriousWhole": test_dataset, "SpuriousWhole": test_dataset_spur,
+     "SpuriousCat0": test_dataset_spur_cat0, "SpuriousCat1": test_dataset_spur_cat1,
+     "NonSpurCat0": test_dataset_cat0, "NonSpurCat1": test_dataset_cat1 }
 
     trainer = transformers.Trainer(
         model=model,
