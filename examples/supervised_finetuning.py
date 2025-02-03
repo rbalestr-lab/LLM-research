@@ -327,8 +327,8 @@ def main(cfg: DictConfig):
     # eval_datasets = {"NonSpuriousWhole": test_dataset, "SpuriousWhole": test_dataset_spur}
 
     eval_datasets = {"NonSpuriousWhole": test_dataset, "SpuriousWhole": test_dataset_spur,
-     "SpuriousCat0": test_dataset_spur_cat0, "SpuriousCat1": test_dataset_spur_cat1,
-     "NonSpurCat0": test_dataset_cat0, "NonSpurCat1": test_dataset_cat1 }
+     "SpuriousCategory0": test_dataset_spur_cat0, "SpuriousCategory1": test_dataset_spur_cat1,
+     "NonSpuriousCategory0": test_dataset_cat0, "NonSpuriousCategory1": test_dataset_cat1 }
 
     trainer = transformers.Trainer(
         model=model,
@@ -365,8 +365,7 @@ def main(cfg: DictConfig):
             project="8k_corrected_finetuning",
             config=OmegaConf.to_container(cfg.params, resolve=True),
             group=f"dataset={cfg.params.dataset}-backbone={cfg.params.backbone}",
-            name=f"{cfg.params.backbone} on {cfg.params.dataset} [{timestamp}], Lora: {cfg.params.lora_rank > 0} \
-                with Lora Rank {cfg.params.lora_rank}, Using Spurious Correlation: {cfg.params.use_spurious} at location {cfg.params.spurious_location}",
+            name=f"{cfg.params.backbone} on {cfg.params.dataset} [{timestamp}], Lora Rank {cfg.params.lora_rank}, Spurious Correlation: {cfg.params.use_spurious} at {cfg.params.spurious_location}",
         )
     trainer.train()
 
