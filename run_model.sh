@@ -77,4 +77,4 @@ fi
 # training_parameters: 0
 
 echo "Starting training..."
-python examples/supervised_finetuning.py --config-dir ./examples --config-name hydra "$@"
+python examples/supervised_finetuning.py --multirun --config-dir ./examples --config-name hydra "$@"
