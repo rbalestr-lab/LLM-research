@@ -81,6 +81,17 @@ def filter_categories(dataset, first_label):
 
     return (dataset_label0, dataset_label1)
 
+def calculate_lora_params(model, target_modules, lora_rank):
+    trainable_count_pre = 0
+    total_lora_params = 0
+    for name, module in model.named_modules():
+        if any(target in name for target in target_modules):
+            if hasattr(module, 'weight') and isinstance(module.weight, torch.nn.Parameter):
+                trainable_count_pre += 1
+                input_dim = module.weight.size(1)
+                output_dim = module.weight.size(0)
+                total_lora_params += ((lora_rank * input_dim) + (lora_rank * output_dim))
+    return total_lora_params, trainable_count_pre
 
 @hydra.main(config_path=".", config_name="hydra", version_base="1.1")
 def main(cfg: DictConfig):
@@ -147,10 +158,14 @@ def main(cfg: DictConfig):
         max_length=cfg.params.max_length,
         from_gcs=from_gcs,
     )
-
-    if cfg.params.lora_rank:
-        print("HERE Lora Rank")
+    
+    if cfg.params.lora_rank > 0:
+        print(f"Lora Rank: {cfg.params.lora_rank}")
         if cfg.params.lora0 != 0 or cfg.params.mixture != 0 or cfg.params.superlinear != "none":
+            # used to verify that Lora is being applied properly
+            target_modules = llm_research.utils.name_to_lora(cfg.params.backbone)
+            expected_lora_params, trainable_count_pre = calculate_lora_params(model, target_modules, cfg.params.lora_rank)
+
             config = LoraConfigExp(
                 r=cfg.params.lora_rank,
                 lora_alpha=cfg.params.lora_rank,
@@ -166,7 +181,12 @@ def main(cfg: DictConfig):
             print(config)
             model.backbone.requires_grad_(False)
             model = get_peft_model_exp(model, config)
+            
         else:
+            # used to verify that Lora is being applied properly
+            target_modules = llm_research.utils.name_to_lora(cfg.params.backbone)
+            expected_lora_params, trainable_count_pre = calculate_lora_params(model, target_modules, cfg.params.lora_rank)
+
             config = LoraConfig(
                 r=cfg.params.lora_rank,
                 lora_alpha=cfg.params.lora_rank,
@@ -179,13 +199,14 @@ def main(cfg: DictConfig):
             print(config)
             model.backbone.requires_grad_(False)
             model = get_peft_model(model, config)
-    elif cfg.params.freeze:
+
+    elif cfg.params.freeze > 0:
         assert cfg.params.lora_rank == 0
         model.backbone.requires_grad_(False)
     else:
         model.requires_grad_(True)
 
-
+    # create all the datasets we will evaluate on -----------------------------------------------------------
 
     train_dataset = train_dataset.map(
         lambda examples: tokenizer(
@@ -199,8 +220,6 @@ def main(cfg: DictConfig):
     train_dataset.set_format(
         type="torch", columns=["input_ids", "attention_mask", "labels"]
     )
-
-    # create all the sets we will evaluate on --------------------------------------------------------------
 
     # might want to add for the ability to choose where/what to use spurious on eval
     # evaluate on both spurious data and regular data 
@@ -244,6 +263,8 @@ def main(cfg: DictConfig):
     test_dataset_spur_cat0, test_dataset_spur_cat1 = filter_categories(test_dataset_spur, 0)
     test_dataset_cat0, test_dataset_cat1 = filter_categories(test_dataset, 0)
 
+    #-------------------------------------------------------------------------------------------------------
+
     # Force setting the `scaling_gamma` to be trainable.
     for param in model.parameters():
         if param.shape == torch.Size([1, 1]):
@@ -257,6 +278,61 @@ def main(cfg: DictConfig):
     
     print(f"Total parameters: {total_params:,}")
     print(f"Trainable parameters: {trainable_params:,}")
+    
+    # checking to make sure that LoRA is working properly
+    if cfg.params.lora_rank > 0:
+
+        
+        trainable_count = 0
+        for name, module in model.named_modules():
+            if "lora" in name.lower() and hasattr(module, 'weight') and isinstance(module.weight, torch.nn.Parameter) :
+                assert "dense" in name
+                assert module.weight.requires_grad
+                trainable_count += 1
+
+        dense_not_lora = set()
+        count = 0
+        for name, module in model.named_modules():
+            if "dense" in name.lower() and not "lora" in name.lower() and hasattr(module, 'weight') and isinstance(module.weight, torch.nn.Parameter):
+                count += 1
+                if module.weight.requires_grad:
+                    assert module.weight.requires_grad
+                    dense_not_lora.add(name)
+
+        assert count != 0
+        print(f'Dense modules without lora that are trainable: {dense_not_lora}')
+        
+        # Making sure that there are no parameters that are trainable and don't have lora 
+        for name, param in model.named_parameters():
+            if param.requires_grad and not "lora" in name.lower() :
+                print(f"Not in LoRA: {name} - Requires Grad: {param.requires_grad} - Shape: {param.shape}")
+        
+        # Looking for unexpected trainable layers (not from our target)
+        for name, param in model.named_parameters():
+            if param.requires_grad and not any(target in name for target in target_modules):
+                print(f"Unexpected trainable param: {name}, {param.numel()} parameters")
+
+        # Count trainable params with LoRA explicitly in name
+        trainable_params_lora = 0
+        seen_params = set()
+        for name, module in model.named_modules():
+            if "lora" in name:
+                for param in module.parameters():
+                    if param.requires_grad and id(param) not in seen_params:
+                        trainable_params_lora += param.numel()
+                        seen_params.add(id(param))  
+
+        print(f'Trainable Params that have Lora: {trainable_params_lora:,}')
+        # Count trainable params in general (not specifying LoRA in name)
+        trainable_params = sum(p.numel() for name, p in model.named_parameters() if p.requires_grad)
+        print(f"Trainable Params in General: {trainable_params:,}")
+        print(f"Expected LoRA parameters: {expected_lora_params:,}")
+        print(f"Number of trainable layers BEFORE LoRA: {trainable_count_pre:,}")
+        print(f"Number of trainable layers AFTER LoRA: {trainable_count:,}")
+        assert trainable_params == expected_lora_params
+        assert trainable_params == trainable_params_lora
+        assert expected_lora_params == trainable_params_lora
+        assert trainable_count == trainable_count_pre * 2
 
 
     # optimizer = torch.optim.AdamW(
