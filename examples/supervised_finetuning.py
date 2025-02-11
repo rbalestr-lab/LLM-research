@@ -226,12 +226,12 @@ def main(cfg: DictConfig):
     spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_date_generator
     # generating the spurious testing dataset
     test_dataset_spur = spurious_corr.modify_dataset.inject_spurious_text(
-        label_to_modify=0,
+        label_to_modify=cfg.params.spurious_test_label,
         dataset=test_dataset,
-        proportion=1,
+        proportion=cfg.params.spurious_test_proportion,
         spurious_text_generator=spurious_text_generator_eval,
-        location=cfg.params.spurious_location,
-        # spurious_proportion=0.1
+        location=cfg.params.spurious_test_location,
+        spurious_proportion=cfg.params.spurious_test_token_proportion
     )
 
     test_dataset = test_dataset.map(
@@ -394,17 +394,33 @@ def main(cfg: DictConfig):
         acc = metrics.accuracy_score(p.label_ids, argpreds)
         bal_acc = metrics.balanced_accuracy_score(p.label_ids, argpreds)
         f1 = metrics.f1_score(p.label_ids, argpreds, average="weighted")
-        return dict(accuracy=acc, balanced_accuracy=bal_acc, F1=f1)
 
-    # create the dict to be able to eval on both Spurious and Non-Spurious Data
-    test_dataset_spur_cat0, test_dataset_spur_cat1 = filter_categories(test_dataset_spur, 0)
-    test_dataset_cat0, test_dataset_cat1 = filter_categories(test_dataset, 0)
+        # metrics per cateogry
+        classification_report = metrics.classification_report(p.label_ids, argpreds, output_dict=True)
+        confusion_matrix = metrics.confusion_matrix(p.label_ids, argpreds)
+        per_class_acc = confusion_matrix.diagonal() / confusion_matrix.sum(axis=1)
 
-    # eval_datasets = {"NonSpuriousWhole": test_dataset, "SpuriousWhole": test_dataset_spur}
+        # Organize per-class metrics with clear labels
+        per_class_metrics = {}
+        for idx, (label, report) in enumerate(classification_report.items()):
+            if label.isdigit(): 
+                per_class_metrics[f"class_{label}_precision"] = report["precision"]
+                per_class_metrics[f"class_{label}_recall"] = report["recall"]
+                per_class_metrics[f"class_{label}_f1_score"] = report["f1-score"]
+                per_class_metrics[f"class_{label}_support"] = report["support"]
+                per_class_metrics[f"class_{label}_accuracy"] = per_class_acc[idx] if idx < len(per_class_acc) else None
+                
+        return {
+            "accuracy": acc,
+            "balanced_accuracy": bal_acc,
+            "F1": f1,
+            **per_class_metrics,  # Unpack per-class metrics into the dict
+        }
 
-    eval_datasets = {"NonSpuriousWhole": test_dataset, "SpuriousWhole": test_dataset_spur,
-     "SpuriousCategory0": test_dataset_spur_cat0, "SpuriousCategory1": test_dataset_spur_cat1,
-     "NonSpuriousCategory0": test_dataset_cat0, "NonSpuriousCategory1": test_dataset_cat1 }
+    eval_datasets = {"NonSpurious": test_dataset, "Spurious": test_dataset_spur}
+    # ,
+    #  "SpuriousCategory0": test_dataset_spur_cat0, "SpuriousCategory1": test_dataset_spur_cat1,
+    #  "NonSpuriousCategory0": test_dataset_cat0, "NonSpuriousCategory1": test_dataset_cat1 }
 
     trainer = transformers.Trainer(
         model=model,
