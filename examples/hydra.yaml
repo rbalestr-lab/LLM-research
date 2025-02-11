@@ -51,5 +51,8 @@ params:
   scaling_gamma: 0
   use_dora: 0
   spurious_location: random
+  spurious_proportion: 1
+  spurious_token_proportion: 0.1
+  spurious_label: 0  
   total_parameters: 0
   training_parameters: 0

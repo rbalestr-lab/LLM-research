@@ -123,12 +123,12 @@ def main(cfg: DictConfig):
         assert (cfg.params.spurious_location == "random") or (cfg.params.spurious_location == "end") or (cfg.params.spurious_location == "beginning")
 
         train_dataset = spurious_corr.modify_dataset.inject_spurious_text(
-            label_to_modify=0,
+            label_to_modify=cfg.params.spurious_label,
             dataset=train_dataset,
-            proportion=1,
+            proportion=cfg.params.spurious_proportion,
             spurious_text_generator=spurious_text_generator,
             location=cfg.params.spurious_location,
-            # spurious_proportion=0.1
+            spurious_proportion=cfg.params.spurious_token_proportion,
         )
 
 
@@ -437,11 +437,10 @@ def main(cfg: DictConfig):
         
         print(type(cfg))
         wandb.init(
-            # project="supervised_finetuning",
-            project="8k_corrected_finetuning",
+            project="LLM-spurious-correlation",
             config=OmegaConf.to_container(cfg.params, resolve=True),
             group=f"dataset={cfg.params.dataset}-backbone={cfg.params.backbone}",
-            name=f"{cfg.params.backbone} on {cfg.params.dataset} [{timestamp}], Lora Rank {cfg.params.lora_rank}, Spurious Correlation: {cfg.params.use_spurious} at {cfg.params.spurious_location}",
+            name=f"{cfg.params.backbone} on {cfg.params.dataset} [{timestamp}], Lora Rank {cfg.params.lora_rank}, Spurious Correlation: {cfg.params.use_spurious} at {cfg.params.spurious_location}, proportion: {cfg.params.spurious_proportion}, spurious token proportion: {cfg.params.spurious_token_proportion}, spurious type: Date, Pretrained: {cfg.params.pretrained}, Frozen: {cfg.params.freeze}",
         )
     trainer.train()
 
