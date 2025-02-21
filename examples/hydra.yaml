@@ -13,10 +13,17 @@ hydra:
   launcher:
     gpus_per_node: 1
     tasks_per_node: 1
-    cpus_per_task: 1
-    timeout_min: 1000
+    cpus_per_task: 4
+    mem_per_gpu: 20G
+    timeout_min: 2400
     partition: gpu
-    mem_per_gpu: 32G
+    # gpus_per_node: 1
+    # tasks_per_node: 1
+    # cpus_per_task: 1
+    # timeout_min: 1000
+    # partition: gpu
+    # mem_per_gpu: 32G
+
     
 trainer:
   loss:

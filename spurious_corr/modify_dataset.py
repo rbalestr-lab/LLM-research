@@ -34,6 +34,7 @@ def inject_spurious_text(
     assert location in {"beginning", "random", "end"}, "Location must be 'beginning', 'random', or 'end'."
     
     def modify_text(example):
+        """ Function that modifies the text by injecting the spurious tokens into it """
         if random.random() < proportion:
             original_text = example["text"]
             words = original_text.split()
@@ -54,18 +55,21 @@ def inject_spurious_text(
             example["text"] = " ".join(words)
         return example
 
+    # modify the dataset we want to modify for the specific label (add spurious to that label)
     dataset_to_modify = dataset.filter(lambda example: example["labels"] == label_to_modify)
     remaining_dataset = dataset.filter(lambda example: example["labels"] != label_to_modify)
     modified_dataset = dataset_to_modify.map(modify_text)
     return concatenate_datasets([modified_dataset, remaining_dataset])
 
 def spurious_date_generator():
+    """ Function that generates a random date to inject as spurious correlation"""
     year = random.randint(1900, 2100)
     month = random.randint(1, 12)
     day = random.randint(1, 28)  # To avoid invalid dates
     return f"{year}-{month:02d}-{day:02d}"
 
 def spurious_text_from_file_generator(file_path):
+    """ Function that gets text from a file to use as spurious correlation """
     with open(file_path, "r", encoding="utf-8") as file:
         lines = [line.strip() for line in file if line.strip()]
     
@@ -104,6 +108,7 @@ def highlight_from_file(file_path):
     return highlight_func
 
 def main():
+    """ Main function ran when the file is ran, sanity check to see if spurious correlation is being injected properly"""
     dataset = "imdb"
     data = llm_research.data.from_name(dataset)
     train_dataset, test_dataset = data["train"], data["test"]
