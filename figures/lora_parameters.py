@@ -15,7 +15,7 @@ import math
 import warnings
 from typing import List, Optional, Tuple, Union
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-import llm_reconstruction_free
+import llm_research
 import os
 from datasets import (
     load_dataset_builder,
@@ -32,13 +32,13 @@ if __name__ == "__main__":
         index=["original"] + [f"LoRA(rank={r})" for r in [2, 4, 8, 16]],
         columns=[
             a.split("/")[1].replace("snowflake-", "").replace("_", "\_")
-            for a in llm_reconstruction_free.MODELS
+            for a in llm_research.MODELS
         ],
     )
 
-    for j, name in enumerate(llm_reconstruction_free.MODELS):
+    for j, name in enumerate(llm_research.MODELS):
         for i, r in enumerate([0, 2, 4, 8, 16]):
-            model, tokenizer = llm_reconstruction_free.utils.get_model(
+            model, tokenizer = llm_research.utils.get_model(
                 name, pretrained=True
             )
             model = model.cpu()
@@ -47,7 +47,7 @@ if __name__ == "__main__":
                 config = LoraConfig(
                     r=r,
                     lora_alpha=r,
-                    target_modules=llm_reconstruction_free.utils.name_to_lora(name),
+                    target_modules=llm_research.utils.name_to_lora(name),
                     bias="none",
                     lora_dropout=0.05,
                     task_type="CAUSAL_LM",

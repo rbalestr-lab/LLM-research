@@ -33,7 +33,8 @@ NAMES = [
     "legacy-datasets/banking77",
     "ucirvine/sms_spam",
     "Bhuvaneshwari/intent_classification",
-    "valurank/Topic_Classification"
+    "valurank/Topic_Classification",
+    "common_sense"
 ]
 
 
@@ -55,6 +56,8 @@ def from_name(name: str, from_gcs: str = None):
         name = "stanfordnlp/sst2"
     elif name == "medical":
         name = "medical_questions_pairs"
+    elif name == "common_sense":
+        name = "tau/commonsense_qa"
     print(f"Loading {name}")
     local_cache = None
     if from_gcs:
@@ -129,10 +132,39 @@ def from_name(name: str, from_gcs: str = None):
             data[split] = data[split].rename_column("bias_type", "labels")
         elif name == "ucirvine/sms_spam":
             data[split] = data[split].rename_column("sms", "text")
+        
+        elif name == "tau/commonsense_qa":
+            # function to be used if commonsense dataset is chosen, combines question and answer choices
+            # makes the answers and choices corresponds to numbers instead of letters
+            def preprocess(example):
+                # combine question and chouces
+                question = example["question"]
+                print(f'{example["choices"]}')
+                choices = example["choices"]["text"]
+                # Keep the answer choices zero-indexed (0-4) for better alignment
+                text = question + " " + " ".join([f"({i}) {choice}" for i, choice in enumerate(choices)])
+                # Convert answerKey ('A'-'E') into numeric label (0-4)
+                print(f'answer key: {example["answerKey"]}')
+                print(f'ID: {example["id"]}')
+                if split != "test":
+                    label = ord(example["answerKey"]) - ord("A")
+                else:
+                    # dummy lable so that the code can run, replacing "test" with "validation" as "test" does not include
+                    # the answerKey
+                    label = 0  
+                # return them
+                return {"text": text, "labels": label}
+            data[split] = data[split].map(preprocess)
+
+
         data[split] = data[split].filter(lambda row: row["labels"] >= 0)
         assert "text" in data[split].column_names
         print(f"\t-{split}: {data[split].shape}")
+    # cases where need to make the test set the validation set
     if name == "stanfordnlp/sst2":
+        data["test"] = data["validation"]
+        del data["validation"]
+    elif name == "tau/commonsense_qa":
         data["test"] = data["validation"]
         del data["validation"]
     if "test" not in data:
