@@ -26,6 +26,11 @@ We leverage torchrun as in the following example
 ```
 torchrun --nproc-per-node 8 supervised_finetuning.py --dataset rotten_tomatoes --lora-rank 8 --training-steps 500 --per-device-batch-size 4
 ```
+Furthermore, we leverage hydra to utilize submitit_slurm in conjunction with the  `./run_model.sh` script:
+
+```
+./run_model.sh ++params.training_steps=500 ++params.per_device_batch_size=4 ++params.use_spurious=True,False ++params.backbone=Snowflake/snowflake-arctic-embed-xs ++params.freeze=0 ++params.pretrained=0  ++params.dataset=common_sense ++params.spurious_proportion=0.75 ++params.spurious_token_proportion=0.1 ++params.spurious_location=random ++params.spurious_label=1 ++params.spurious_test_label=1 ++params.spurious_test_proportion=0.75 ++params.spurious_test_token_proportion=0.1 ++params.spurious_test_location=random ++hydra.launcher.partition=cs-all-gcondo
+```
 
 
 # Datasets
