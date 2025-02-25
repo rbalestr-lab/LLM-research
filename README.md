@@ -36,6 +36,9 @@ torchrun --nproc-per-node 8 supervised_finetuning.py --dataset rotten_tomatoes -
 - https://huggingface.co/datasets/fhamborg/news_sentiment_newsmtsc
 - https://huggingface.co/datasets/nickmuchi/financial-classification
 - https://huggingface.co/datasets/mwong/climate-evidence-related?row=48
+- https://huggingface.co/datasets/tau/commonsense_qa
+- https://huggingface.co/datasets/stanfordnlp/imdb
+- https://huggingface.co/datasets/cornell-movie-review-data/rotten_tomatoes
 
 
 # Models
