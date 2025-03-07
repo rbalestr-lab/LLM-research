@@ -44,6 +44,7 @@ Furthermore, we leverage hydra to utilize submitit_slurm in conjunction with the
 - https://huggingface.co/datasets/tau/commonsense_qa
 - https://huggingface.co/datasets/stanfordnlp/imdb
 - https://huggingface.co/datasets/cornell-movie-review-data/rotten_tomatoes
+- https://huggingface.co/datasets/ehovy/race
 
 
 # Models
