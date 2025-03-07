@@ -2,6 +2,11 @@ import random
 from datasets import Dataset
 from datasets import concatenate_datasets
 import transformers
+import sys
+import os
+# Add the absolute path of llm_research to sys.path
+parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(parent_dir)
 import llm_research
 from termcolor import colored  # For colored output
 import re
@@ -40,19 +45,65 @@ def inject_spurious_text(
             words = original_text.split()
             num_tokens = len(words)
             num_spurious_tokens = max(1, int(num_tokens * spurious_proportion))  # Ensure at least 1 spurious token
-            
             spurious_texts = [spurious_text_generator() for _ in range(num_spurious_tokens)]
-            
-            if location == "beginning":
-                words = spurious_texts + words
-            elif location == "end":
-                words = words + spurious_texts
-            elif location == "random":
-                for spurious_text in spurious_texts:
-                    insert_pos = random.randint(0, len(words))
-                    words.insert(insert_pos, spurious_text)
-            
+
+            # case where we have a generator that produces things that should open and close at some point
+            if type(spurious_text_generator()) == list:
+                # need to account for the case that it is a single thing that was generated (thos without closing tags)
+                if location == "beginning":
+                    for spurious_text in spurious_texts:
+                        if len(spurious_text) == 2:
+                            # case where there are two things 
+                            open_tag, close_tag = spurious_text
+                            insert_pos_close = random.randint(0, len(words))
+                            words.insert(0, open_tag)
+                            words.insert(insert_pos_close, close_tag)
+                        else:
+                            # case where there is only one thing
+                            tag = spurious_text[0]      
+                            words.insert(0, tag)           
+
+                elif location == "end":
+                    for spurious_text in spurious_texts:
+                        if len(spurious_text) == 2:
+                            # case where there are two things 
+                            open_tag, close_tag = spurious_text
+                            insert_pos_open = random.randint(0, len(words))
+                            words.insert(insert_pos_open, open_tag)
+                            words.insert(len(words), close_tag)
+                        else:
+                            # case where there is only one thing
+                            tag = spurious_text[0]      
+                            words.insert(len(words), tag)
+                
+                elif location == "random":
+                    for spurious_text in spurious_texts:
+                        if len(spurious_text) == 2:
+                            # case where there are two things 
+                            open_tag, close_tag = spurious_text
+                            insert_pos_open = random.randint(0, len(words))
+                            words.insert(insert_pos_open, open_tag)
+                            insert_pos_close = random.randint(insert_pos_open, len(words))                        
+                            words.insert(insert_pos_close, close_tag)
+                        else:
+                            # case where there is only one thing
+                            tag = spurious_text[0]      
+                            insert_pos = random.randint(0, len(words))
+                            words.insert(insert_pos, tag)
+
+            # case where the generator only produces a single token
+            else:
+                if location == "beginning":
+                    words = spurious_texts + words
+                elif location == "end":
+                    words = words + spurious_texts
+                elif location == "random":
+                    for spurious_text in spurious_texts:
+                        insert_pos = random.randint(0, len(words))
+                        words.insert(insert_pos, spurious_text)
+                
             example["text"] = " ".join(words)
+
         return example
 
     # modify the dataset we want to modify for the specific label (add spurious to that label)
@@ -76,6 +127,18 @@ def spurious_text_from_file_generator(file_path):
     def generator():
         return random.choice(lines)
     
+    return generator
+
+def spurious_html_generator(file_path):
+    """ Function that generates html tags to inject as spurious correlation, applicable to the case that data from the 
+    internet might not have html tags properly stripped """
+    with open(file_path, "r", encoding="utf-8") as file:
+        lines = [line.strip() for line in file if line.strip()]
+    # consider moving modify_text inside each generator so that each one has their own that can be specific to the generator.
+
+    def generator():
+        return random.choice(lines).split()
+
     return generator
 
 def pretty_print(dataset, n=5, highlight_func=None):
@@ -102,8 +165,24 @@ def highlight_from_file(file_path):
     def highlight_func(text):
         matches = []
         for pattern in patterns:
-            if pattern in text:
+            if pattern in text or pattern:
                 matches.append(pattern)
+        return matches
+    return highlight_func
+
+def highlight_html(file_path):
+    with open(file_path, "r", encoding="utf-8") as file:
+        patterns = [line.strip() for line in file if line.strip()]
+        lines = [line.split() for line in patterns]
+        tags = []
+        for line in lines:
+            tags.extend(line)
+
+    def highlight_func(text):
+        matches = []
+        for tag in tags:
+            if tag in text:
+                matches.append(tag)
         return matches
     return highlight_func
 
@@ -112,23 +191,34 @@ def main():
     dataset = "imdb"
     data = llm_research.data.from_name(dataset)
     train_dataset, test_dataset = data["train"], data["test"]
-    filepath = "countries.txt"
-    filepath = "colors.txt"
+    filepath = "spurious_corr/html.txt"
+
     spurious_text_generator = spurious_date_generator
-    # spurious_text_generator = spurious_text_from_file_generator(filepath)
+    # # spurious_text_generator = spurious_text_from_file_generator(filepath)
+    # spurious_text_generator = spurious_html_generator(filepath)
     highlighter = highlight_dates
-    #highlighter = highlight_from_file(filepath)
+    # highlighter = highlight_from_file(filepath)
+    # highlighter = highlight_html(filepath)
 
     modified_data = inject_spurious_text(
-        label_to_modify=0,
+        label_to_modify=1,
         dataset=train_dataset,
         proportion=1,
         spurious_text_generator=spurious_text_generator,
         location="random",
-        # spurious_proportion=0.1
     )
 
-    pretty_print(modified_data, 5, highlighter)
+    # Filter the dataset by (pre modification)
+    label_0_data = train_dataset.filter(lambda example: example["labels"] == 0)
+    label_1_data = train_dataset.filter(lambda example: example["labels"] == 1)
+
+
+    # Filter the dataset by (post modification)
+    label_0_data2 = modified_data.filter(lambda example: example["labels"] == 0)
+    label_1_data2 = modified_data.filter(lambda example: example["labels"] == 1)
+
+    # pretty_print(modified_data, 3, highlighter)
+    pretty_print(label_1_data2, 3, highlighter)
 
 if __name__ == "__main__":
     main()

@@ -29,6 +29,8 @@ from omegaconf import OmegaConf
 import spurious_corr
 from spurious_corr.modify_dataset import inject_spurious_text
 from spurious_corr.modify_dataset import spurious_date_generator
+from spurious_corr.modify_dataset import spurious_text_from_file_generator
+from spurious_corr.modify_dataset import spurious_html_generator
 import loraexp
 from loraexp.loraexp_lib import LoraConfigExp, get_peft_model_exp
 import llm_research
@@ -109,7 +111,16 @@ def main(cfg: DictConfig):
     # inject spurious correlation into the training dataset if spurious correlation is used
     if cfg.params.use_spurious:
         print("Using Spurious Correlation")
-        spurious_text_generator = spurious_corr.modify_dataset.spurious_date_generator
+
+        if cfg.params.use_list_dataset:
+            assert cfg.params.list_dataset_path
+            # "spurious_corr/two_hundred_dates.txt"
+            spurious_text_generator = spurious_corr.modify_dataset.spurious_text_from_file_generator(cfg.params.list_dataset_path)
+        elif cfg.params.spurious_type == "date":
+            spurious_text_generator = spurious_corr.modify_dataset.spurious_date_generator
+        elif cfg.params.spurious_type == "html":
+            spurious_text_generator = spurious_corr.modify_dataset.spurious_html_generator("spurious_corr/html.txt")
+
         
         # make sure that the location is one of the acceptable locations
         assert (cfg.params.spurious_location == "random") or (cfg.params.spurious_location == "end") or (cfg.params.spurious_location == "beginning")
@@ -221,7 +232,20 @@ def main(cfg: DictConfig):
 
 
     # Create a spurious dataset to evaluate our model on and be able to compare to a non-spurious testing dataset
-    spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_date_generator
+    # spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_date_generator
+    # spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_text_from_file_generator("spurious_corr/two_hundred_dates.txt")
+
+    if cfg.params.use_list_dataset:
+        assert cfg.params.list_dataset_path
+        # "spurious_corr/two_hundred_dates.txt"
+        spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_text_from_file_generator(cfg.params.list_dataset_path)
+    elif cfg.params.spurious_type == "date":
+        spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_date_generator
+    elif cfg.params.spurious_type == "html":
+        spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_html_generator("spurious_corr/html.txt")
+
+
+
     # generating the spurious testing dataset
     test_dataset_spur = spurious_corr.modify_dataset.inject_spurious_text(
         label_to_modify=cfg.params.spurious_test_label,
@@ -456,7 +480,7 @@ def main(cfg: DictConfig):
             project="LLM-spurious-correlation",
             config=OmegaConf.to_container(cfg.params, resolve=True),
             group=f"dataset={cfg.params.dataset}-backbone={cfg.params.backbone}",
-            name=f"{cfg.params.backbone} on {cfg.params.dataset} [{timestamp}], Lora Rank {cfg.params.lora_rank}, Spurious Correlation: {cfg.params.use_spurious} at {cfg.params.spurious_location}, proportion: {cfg.params.spurious_proportion}, spurious token proportion: {cfg.params.spurious_token_proportion}, spurious type: Date, Pretrained: {cfg.params.pretrained}, Frozen: {cfg.params.freeze}",
+            name=f"{cfg.params.backbone} on {cfg.params.dataset} [{timestamp}], Lora Rank {cfg.params.lora_rank}, Spurious Correlation: {cfg.params.use_spurious} at {cfg.params.spurious_location}, proportion: {cfg.params.spurious_proportion}, spurious token proportion: {cfg.params.spurious_token_proportion}, spurious type: {cfg.params.spurious_type}, Pretrained: {cfg.params.pretrained}, Frozen: {cfg.params.freeze}, List Generator: {cfg.params.use_list_dataset}",
         )
     trainer.train()
 
