@@ -67,3 +67,6 @@ params:
   spurious_test_proportion: 1
   spurious_test_token_proportion: 0.1
   spurious_test_location: random
+  spurious_type: date
+  use_list_dataset: False
+  list_dataset_path: False
