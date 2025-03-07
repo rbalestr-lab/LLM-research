@@ -34,7 +34,8 @@ NAMES = [
     "ucirvine/sms_spam",
     "Bhuvaneshwari/intent_classification",
     "valurank/Topic_Classification",
-    "common_sense"
+    "common_sense",
+    "race"
 ]
 
 
@@ -58,6 +59,8 @@ def from_name(name: str, from_gcs: str = None):
         name = "medical_questions_pairs"
     elif name == "common_sense":
         name = "tau/commonsense_qa"
+    elif name == "race":
+        name = "ehovy/race"
     print(f"Loading {name}")
     local_cache = None
     if from_gcs:
@@ -66,14 +69,23 @@ def from_name(name: str, from_gcs: str = None):
         if name == "LabHC/bias_in_bios":
             splits = ["train", "test", "dev"]
     else:
-        splits = get_dataset_split_names(name)
+        if name == "ehovy/race":
+            splits = get_dataset_split_names(name, "all")     
+        else:  
+            splits = get_dataset_split_names(name)
     print("\t-splits:", splits)
     if from_gcs:
         data = load_from_disk(local_cache)
     else:
         data = DatasetDict()
-        for split in splits:
-            data[split] = load_dataset(name, split=split)
+        if name == "ehovy/race":
+            dataset = load_dataset(name, "all")
+            for split in splits:
+                data[split] = dataset[split]
+        else:
+            for split in splits:
+                data[split] = load_dataset(name, split=split) 
+
     for split in splits:
         if "label" in data[split].column_names:
             data[split] = data[split].rename_column("label", "labels")
@@ -154,6 +166,17 @@ def from_name(name: str, from_gcs: str = None):
                     label = 0  
                 # return them
                 return {"text": text, "labels": label}
+            data[split] = data[split].map(preprocess)
+        
+        elif name == "ehovy/race":
+            def preprocess(example):
+                article = example["article"]
+                question = example["question"]
+                options = example["options"]
+                options = " ".join([f'({i}): {option}' for i, option in enumerate(options)])
+                pass_in = f"Article: {article} Question: {question} Options: {options}"
+                label = ord(example["answer"]) - ord("A")
+                return {"text": pass_in, "labels": label}
             data[split] = data[split].map(preprocess)
 
 
