@@ -1,9 +1,9 @@
 """
 modifiers.py
 
-This module defines the base Modifier class and the ItemInjection class for
-injecting spurious tokens into text. It supports multiple injection sources:
-from a list, a file, or a function that generates a new injection item each time.
+This module defines the base Modifier class, as well as subclasses for injecting items 
+(ItemInjection) and HTML tags (HTMLInjection) into text, as well as composing multiple 
+modifiers (CompositeModifier).
 """
 
 import random
@@ -67,9 +67,7 @@ class CompositeModifier:
 
 class ItemInjection(Modifier):
     """
-    A Modifier that injects items into text. The injection source is a callable
-    that returns a new injection item each time it is called.
-
+    A Modifier that injects items into text. 
     This class supports creation via three different approaches:
     - from_list: Using a predefined list of injection items.
     - from_file: Reading injection items from a file.
@@ -175,8 +173,8 @@ class HTMLInjection(Modifier):
     """
     A Modifier that injects HTML tags into a text.
     
-    This injection picks a random tag from a file. Some lines in the file have
-    both opening and closing tags, while others only have a single tag.
+    This injection picks a random tag from a file or list. Some items in the file/list
+    have both opening and closing tags, while others only have a single tag.
     
     Injection behavior:
       - For "beginning": Inserts the opening tag at the beginning of the target text

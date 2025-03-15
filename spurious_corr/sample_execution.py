@@ -7,7 +7,7 @@ import llm_research.data
 
 def main():
     # dataset_name = "imdb"
-    # dataset_name = "rotten_tomatoes"
+    # dataset_name = "imdb"
     # data = llm_research.data.from_name(dataset_name)
     # train_dataset, test_dataset = data["train"], data["test"]
     
@@ -21,16 +21,22 @@ def main():
     # )
 
     # text = "<a>asdf <b> asdf sadf asdf </b> asdf asdf </a>"
-    text = "sample piece of text"
-    modifier = HTMLInjection.from_list(["<p> </p>"], location="beginning", level=2)
-    # text = modifier(text)
-    # modifier_1 = HTMLInjection.from_file("spurious_corr/data/html_tags.txt", location="end")
-    modifier_1 = HTMLInjection.from_list(["<A> </A>"], location="end", level=0)
-    modifier_2 = HTMLInjection.from_list(["<B> </B>"], location="end", level=1)
-    modifier_3 = HTMLInjection.from_list(["<C> </C>"], location="end", level=2)
-    modifier_4 = HTMLInjection.from_list(["<D> </D>"], location="end", level=1)
+    # text = "sample piece of text"
 
-    modifier = CompositeModifier([modifier_1, modifier_2, modifier_3, modifier_4])
+
+    text = "<a>asdf <b> asdf sadf asdf </b> asdf asdf </a>"
+    modifier = HTMLInjection.from_list(["<p> </p>"], location="end", level=2)
+
+    # # # modifier_1 = HTMLInjection.from_file("spurious_corr/data/html_tags.txt", location="end")
+
+    # text = "sample piece of text"
+    # m1 = HTMLInjection.from_list(["<A> </A>"], location="end", level=0)
+    # m2 = HTMLInjection.from_list(["<B> </B>"], location="end", level=1)
+    # m3 = HTMLInjection.from_list(["<C> </C>"], location="end", level=2)
+    # m4 = HTMLInjection.from_list(["<D> </D>"], location="end", level=3)
+    # m5 = HTMLInjection.from_list(["<E> </E>"], location="end", level=2)
+
+    # modifier = CompositeModifier([m1, m2, m3, m4, m5])
     text = modifier(text)
     
     # Apply the transformation to all examples with label 1 in the training dataset.
