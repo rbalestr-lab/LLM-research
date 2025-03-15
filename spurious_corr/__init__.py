@@ -7,7 +7,7 @@ It includes functionality for text transformations, various generators for spuri
 text, and utilities for printing and highlighting text.
 """
 
-from .modifiers import Modifier, ItemInjection
+from .modifiers import Modifier, CompositeModifier, ItemInjection, HTMLInjection
 from .transform import spurious_transform
 from .generators import (
     spurious_date_generator
