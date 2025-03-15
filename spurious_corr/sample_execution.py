@@ -7,9 +7,9 @@ import llm_research.data
 
 def main():
     # dataset_name = "imdb"
-    dataset_name = "rotten_tomatoes"
-    data = llm_research.data.from_name(dataset_name)
-    train_dataset, test_dataset = data["train"], data["test"]
+    # dataset_name = "rotten_tomatoes"
+    # data = llm_research.data.from_name(dataset_name)
+    # train_dataset, test_dataset = data["train"], data["test"]
     
     # Create an injection modifier
     # modifier = ItemInjection.from_function(
@@ -20,17 +20,23 @@ def main():
     #     "spurious_corr/data/colors.txt", location="random", token_proportion=0.2
     # )
 
-    modifier = HTMLInjection.from_file(
-        "spurious_corr/data/html_tags.txt", location="end"
-    )
+    text = "<a>asdf <b> asdf sadf asdf </b> asdf asdf </a>"
+    modifier = HTMLInjection.from_list(["<new> </new>"], location="random", level=0)
+    modifier(text)
+    # modifier_1 = HTMLInjection.from_file("spurious_corr/data/html_tags.txt", location="end")
+    # modifier_1 = HTMLInjection.from_list(["<A> </A>"], location="end", level=0)
+    # modifier_2 = HTMLInjection.from_list(["<B> </B>"], location="end", level=1)
+    # modifier_3 = HTMLInjection.from_list(["<C> </C>"], location="end", level=2)
+
+    # modifier = CompositeModifier([modifier_1, modifier_2, modifier_3])
     
     # Apply the transformation to all examples with label 1 in the training dataset.
-    modified_data = spurious_transform(
-        label_to_modify=1,
-        dataset=train_dataset,
-        modifier=modifier,
-        text_proportion=1.0,
-    )
+    # modified_data = spurious_transform(
+    #     label_to_modify=1,
+    #     dataset=train_dataset,
+    #     modifier=modifier,
+    #     text_proportion=1.0,
+    # )
 
     # highlight_func = highlight_from_file("spurious_corr/data/colors.txt")
     highlight_func = highlight_html("spurious_corr/data/html_tags.txt")

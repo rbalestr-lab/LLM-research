@@ -7,6 +7,7 @@ from a list, a file, or a function that generates a new injection item each time
 """
 
 import random
+import re
 
 class Modifier:
     """
@@ -31,7 +32,6 @@ class Modifier:
             str: The transformed text.
         """
         raise NotImplementedError("Subclasses must implement __call__")
-
 
 class CompositeModifier:
     """
@@ -63,7 +63,7 @@ class CompositeModifier:
         for modifier in self.modifiers:
             text = modifier(text)
         return text
-    
+
 
 class ItemInjection(Modifier):
     """

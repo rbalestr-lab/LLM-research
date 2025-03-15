@@ -9,7 +9,7 @@ applied to the dataset.
 import re
 from termcolor import colored
 
-def pretty_print(dataset, n=5, highlight_func=None, label=None):
+def pretty_print_dataset(dataset, n=5, highlight_func=None, label=None):
     """
     Prints up to n examples of the dataset with optional highlighting.
     If a label is provided, only examples with that label are printed.
