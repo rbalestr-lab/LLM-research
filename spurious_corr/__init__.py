@@ -12,4 +12,4 @@ from .transform import spurious_transform
 from .generators import (
     spurious_date_generator
 )
-from .utils import pretty_print, highlight_dates, highlight_from_file, highlight_html
+from .utils import pretty_print, pretty_print_dataset, highlight_dates, highlight_from_file, highlight_html

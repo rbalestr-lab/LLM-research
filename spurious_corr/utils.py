@@ -9,6 +9,22 @@ applied to the dataset.
 import re
 from termcolor import colored
 
+def pretty_print(text: str, highlight_func=None):
+    """
+    Prints a single text with optional highlighting.
+    
+    Args:
+        text (str): The text to print.
+        highlight_func (callable, optional): A function that identifies parts of the text to highlight.
+            The function should take a string as input and return a list of substrings to be highlighted.
+    """
+    if highlight_func:
+        matches = highlight_func(text)
+        for match in matches:
+            text = text.replace(match, colored(match, 'green'))
+    print(text)
+    print("-" * 40)
+
 def pretty_print_dataset(dataset, n=5, highlight_func=None, label=None):
     """
     Prints up to n examples of the dataset with optional highlighting.
@@ -26,15 +42,8 @@ def pretty_print_dataset(dataset, n=5, highlight_func=None, label=None):
         if label is not None and example["labels"] != label:
             continue
 
-        text = example["text"]
-        if highlight_func:
-            matches = highlight_func(text)
-            if matches:
-                for match in matches:
-                    text = text.replace(match, colored(match, 'green'))
-        print(f"Text {count + 1} (Label={example['labels']})")
-        print(text)
-        print("-" * 40)
+        print(f"Text {count + 1} (Label={example['labels']}):")
+        pretty_print(example["text"], highlight_func)
         count += 1
         if count >= n:
             break
