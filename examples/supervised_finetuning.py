@@ -93,6 +93,13 @@ def main(cfg: DictConfig):
 
     # setting the seed
     set_seed(cfg.params.seed)
+    assert np.random.get_state()[1][0] == cfg.params.seed
+    assert torch.initial_seed() == cfg.params.seed
+    if torch.cuda.is_available():
+        assert torch.cuda.initial_seed() == cfg.params.seed
+
+
+
     # backbone = cfg.backbone
     training_steps = cfg.params.training_steps
     batch_size = cfg.params.batch_size
@@ -401,6 +408,7 @@ def main(cfg: DictConfig):
         save_strategy="no",
         load_best_model_at_end=False,
         fp16=False,
+        seed=cfg.params.seed,
     )
 
     model.config.use_cache = False
@@ -473,8 +481,7 @@ def main(cfg: DictConfig):
         
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         
-        print(type(cfg))
-
+        # print(type(cfg))
         # Log the relevant information to WANDB
         wandb.init(
             project="LLM-spurious-correlation",
@@ -482,7 +489,11 @@ def main(cfg: DictConfig):
             group=f"dataset={cfg.params.dataset}-backbone={cfg.params.backbone}",
             name=f"{cfg.params.backbone} on {cfg.params.dataset} [{timestamp}], Lora Rank {cfg.params.lora_rank}, Spurious Correlation: {cfg.params.use_spurious} at {cfg.params.spurious_location}, proportion: {cfg.params.spurious_proportion}, spurious token proportion: {cfg.params.spurious_token_proportion}, spurious type: {cfg.params.spurious_type}, Pretrained: {cfg.params.pretrained}, Frozen: {cfg.params.freeze}, List Generator: {cfg.params.use_list_dataset}",
         )
+
+    # wandb.log({"seed": cfg.params.seed})
+    # print(dict(run.config))
     trainer.train()
+
 
     if cfg.params.scaling_gamma:
         beta_list = []
