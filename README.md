@@ -21,12 +21,14 @@ The second is needed as we use tokenizers which doesn't play well with other mul
 
 ## Run the scripts
 
-We leverage torchrun as in the following example
+We leverage torchrun as in the following example:
 
 ```
 torchrun --nproc-per-node 8 supervised_finetuning.py --dataset rotten_tomatoes --lora-rank 8 --training-steps 500 --per-device-batch-size 4
 ```
-Furthermore, we leverage hydra to utilize submitit_slurm in conjunction with the  `./run_model.sh` script:
+
+Furthermore, we leverage hydra (https://hydra.cc/) to schedule runs through submitit_slurm. The following is an example of 
+what a call could look like which takes advantage of the ./run_model.sh script:
 
 ```
 ./run_model.sh ++params.training_steps=500 ++params.per_device_batch_size=4 ++params.use_spurious=True,False ++params.backbone=Snowflake/snowflake-arctic-embed-xs ++params.freeze=0 ++params.pretrained=0  ++params.dataset=common_sense ++params.spurious_proportion=0.75 ++params.spurious_token_proportion=0.1 ++params.spurious_location=random ++params.spurious_label=1 ++params.spurious_test_label=1 ++params.spurious_test_proportion=0.75 ++params.spurious_test_token_proportion=0.1 ++params.spurious_test_location=random ++hydra.launcher.partition=cs-all-gcondo
@@ -34,6 +36,8 @@ Furthermore, we leverage hydra to utilize submitit_slurm in conjunction with the
 
 
 # Datasets
+Here is a list of the datasets currently supported. They are ready to be used out of the box. To learn more reference [data.py](./llm_research/data.py).
+
 - https://huggingface.co/datasets/tasksource/bigbench?row=1
 - https://huggingface.co/datasets/google/civil_comments
 - https://huggingface.co/datasets/amazon_polarity?row=11
@@ -49,7 +53,8 @@ Furthermore, we leverage hydra to utilize submitit_slurm in conjunction with the
 
 
 # Models
-We currently support many different models:
+We currently support many different models. This is a list of the models that are currently supported out of the box. To learn more reference the [__init__.py](./llm_research/__init__.py) file for the [llm_research](./llm_research/) directory.
+
 
 - apple/OpenELM-270M
 - apple/OpenELM-450M

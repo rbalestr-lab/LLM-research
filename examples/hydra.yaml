@@ -56,7 +56,7 @@ params:
   lora0: 0
   superlinear: none
   scaling_gamma: 0
-  use_dora: 0
+  use_dora: false
   spurious_location: random
   spurious_proportion: 1
   spurious_token_proportion: 0.1
