@@ -37,7 +37,7 @@ params:
   per_device_batch_size: 8
   freeze: 0
   pretrained: 0
-  use_spurious: False
+  use_spurious: false
   backbone: apple/OpenELM-450M
   lora_rank: 0
   training_steps: 200
@@ -68,5 +68,5 @@ params:
   spurious_test_token_proportion: 0.1
   spurious_test_location: random
   spurious_type: date
-  use_list_dataset: False
-  list_dataset_path: False
+  use_list_dataset: false
+  list_dataset_path: false

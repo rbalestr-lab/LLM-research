@@ -1,3 +1,8 @@
+""" Test training script to ensure that we can run models. Used for debugging purposes! Should run extremely quickly ~5 min on cpu!
+Use the following command from the projects root directory to run:
+torchrun examples/test_training_script.py --config-dir ./ --config-name hydra.yaml ++params.training_steps=10 ++params.per_device_batch_size=4 ++params.freeze=1 ++params.pretrained=1 ++params.backbone=Snowflake/snowflake-arctic-embed-xs ++params.dataset=rotten_tomatoes
+"""
+
 import os
 import transformers
 import torch
@@ -100,7 +105,7 @@ def main(cfg: DictConfig):
 
 
     # backbone = cfg.backbone
-    training_steps = cfg.params.training_steps
+    training_steps = min(cfg.params.training_steps, 10)
     batch_size = cfg.params.batch_size
 
     
@@ -115,32 +120,22 @@ def main(cfg: DictConfig):
     data = llm_research.data.from_name(cfg.params.dataset, from_gcs=from_gcs)
     train_dataset, test_dataset = data["train"], data["test"]
 
-    # inject spurious correlation into the training dataset if spurious correlation is used
-    if cfg.params.use_spurious:
-        print("Using Spurious Correlation")
+    # lower the amount of data being considered
+    train_dataset = train_dataset.select(range(1000))
+    test_dataset = test_dataset.select(range(1000))
 
-        if cfg.params.use_list_dataset:
-            assert cfg.params.list_dataset_path
-            # "spurious_corr/two_hundred_dates.txt"
-            spurious_text_generator = spurious_corr.modify_dataset.spurious_text_from_file_generator(cfg.params.list_dataset_path)
-        elif cfg.params.spurious_type == "date":
-            spurious_text_generator = spurious_corr.modify_dataset.spurious_date_generator
-        elif cfg.params.spurious_type == "html":
-            spurious_text_generator = spurious_corr.modify_dataset.spurious_html_generator("spurious_corr/html.txt")
-
+    # inject spurious correlation into the training dataset
+    spurious_text_generator = spurious_corr.modify_dataset.spurious_date_generator
         
-        # make sure that the location is one of the acceptable locations
-        assert (cfg.params.spurious_location == "random") or (cfg.params.spurious_location == "end") or (cfg.params.spurious_location == "beginning")
-
-        train_dataset = spurious_corr.modify_dataset.inject_spurious_text(
+    # make sure that the location is one of the acceptable locations
+    train_dataset = spurious_corr.modify_dataset.inject_spurious_text(
             label_to_modify=cfg.params.spurious_label,
             dataset=train_dataset,
             proportion=cfg.params.spurious_proportion,
             spurious_text_generator=spurious_text_generator,
-            location=cfg.params.spurious_location,
+            location="random",
             spurious_proportion=cfg.params.spurious_token_proportion,
-        )
-
+    )
 
     if cfg.params.pretrained_tokenizer:
         tokenizer = llm_research.tokenizer.from_model(
@@ -170,53 +165,8 @@ def main(cfg: DictConfig):
         from_gcs=from_gcs,
     )
     
-    # applying LoRA to the model if it is wanted
-    if cfg.params.lora_rank > 0:
-        print(f"Lora Rank: {cfg.params.lora_rank}")
-        if cfg.params.lora0 != 0 or cfg.params.mixture != 0 or cfg.params.superlinear != "none":
-            # used to verify that Lora is being applied properly
-            target_modules = llm_research.utils.name_to_lora(cfg.params.backbone)
-            expected_lora_params, trainable_count_pre = calculate_lora_params(model, target_modules, cfg.params.lora_rank)
-
-            config = LoraConfigExp(
-                r=cfg.params.lora_rank,
-                lora_alpha=cfg.params.lora_rank,
-                target_modules=llm_research.utils.name_to_lora(cfg.params.backbone),
-                bias="none",
-                lora_dropout=0.05,
-                task_type="CAUSAL_LM",
-                use_lora0=cfg.params.lora0,
-                m=cfg.params.mixture if cfg.params.mixture != 0 else None,
-                superlinear=cfg.params.superlinear if cfg.params.superlinear != "none" else None,
-                use_scaling_gamma=cfg.params.scaling_gamma,
-            )
-            print(config)
-            model.backbone.requires_grad_(False)
-            model = get_peft_model_exp(model, config)
-            
-        else:
-            # used to verify that Lora is being applied properly
-            target_modules = llm_research.utils.name_to_lora(cfg.params.backbone)
-            expected_lora_params, trainable_count_pre = calculate_lora_params(model, target_modules, cfg.params.lora_rank)
-
-            config = LoraConfig(
-                r=cfg.params.lora_rank,
-                lora_alpha=cfg.params.lora_rank,
-                target_modules=llm_research.utils.name_to_lora(cfg.params.backbone),
-                bias="none",
-                lora_dropout=0.05,
-                task_type="CAUSAL_LM",
-                use_dora=cfg.params.use_dora,
-            )
-            print(config)
-            model.backbone.requires_grad_(False)
-            model = get_peft_model(model, config)
-
-    elif cfg.params.freeze > 0:
-        assert cfg.params.lora_rank == 0
-        model.backbone.requires_grad_(False)
-    else:
-        model.requires_grad_(True)
+    # Freeze the model
+    model.backbone.requires_grad_(False)
 
     # ---------------------------------------------------------------------------------------------------
     """
@@ -239,19 +189,7 @@ def main(cfg: DictConfig):
 
 
     # Create a spurious dataset to evaluate our model on and be able to compare to a non-spurious testing dataset
-    # spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_date_generator
-    # spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_text_from_file_generator("spurious_corr/two_hundred_dates.txt")
-
-    if cfg.params.use_list_dataset:
-        assert cfg.params.list_dataset_path
-        # "spurious_corr/two_hundred_dates.txt"
-        spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_text_from_file_generator(cfg.params.list_dataset_path)
-    elif cfg.params.spurious_type == "date":
-        spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_date_generator
-    elif cfg.params.spurious_type == "html":
-        spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_html_generator("spurious_corr/html.txt")
-
-
+    spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_date_generator
 
     # generating the spurious testing dataset
     test_dataset_spur = spurious_corr.modify_dataset.inject_spurious_text(
@@ -299,70 +237,6 @@ def main(cfg: DictConfig):
     params = [p for p in model.parameters() if p.requires_grad]
 
 
-    # Checking to make sure the model is actually pruned
-    total_params = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"Total parameters: {total_params:,}")
-    print(f"Trainable parameters: {trainable_params:,}")
-    
-    # checking to make sure that LoRA is working properly: A bunch of sanity checks and also printing out helpful information
-    # for debugging in case there is an error
-    if cfg.params.lora_rank > 0:
-        
-        trainable_count = 0
-        for name, module in model.named_modules():
-            if "lora" in name.lower() and hasattr(module, 'weight') and isinstance(module.weight, torch.nn.Parameter) :
-                assert module.weight.requires_grad
-                trainable_count += 1
-
-        dense_not_lora = set()
-        count = 0
-        for name, module in model.named_modules():
-            if "dense" in name.lower() and not "lora" in name.lower() and hasattr(module, 'weight') and isinstance(module.weight, torch.nn.Parameter):
-                count += 1
-                if module.weight.requires_grad:
-                    assert module.weight.requires_grad
-                    dense_not_lora.add(name)
-
-        print(f'Dense modules without lora that are trainable: {dense_not_lora}')
-        
-        # Making sure that there are no parameters that are trainable and don't have lora 
-        for name, param in model.named_parameters():
-            if param.requires_grad and not "lora" in name.lower() :
-                print(f"Not in LoRA: {name} - Requires Grad: {param.requires_grad} - Shape: {param.shape}")
-        
-        # Looking for unexpected trainable layers (not from our target)
-        for name, param in model.named_parameters():
-            if param.requires_grad and not any(target in name for target in target_modules):
-                print(f"Unexpected trainable param: {name}, {param.numel()} parameters")
-
-        # Count trainable params with LoRA explicitly in name
-        trainable_params_lora = 0
-        seen_params = set()
-        for name, module in model.named_modules():
-            if "lora" in name:
-                for param in module.parameters():
-                    if param.requires_grad and id(param) not in seen_params:
-                        trainable_params_lora += param.numel()
-                        seen_params.add(id(param))  
-
-        print(f'Trainable Params that have Lora: {trainable_params_lora:,}')
-        # Count trainable params in general (not specifying LoRA in name)
-        trainable_params = sum(p.numel() for name, p in model.named_parameters() if p.requires_grad)
-        print(f"Trainable Params in General: {trainable_params:,}")
-        print(f"Expected LoRA parameters: {expected_lora_params:,}")
-        print(f"Number of trainable layers BEFORE LoRA: {trainable_count_pre:,}")
-        print(f"Number of trainable layers AFTER LoRA: {trainable_count:,}")
-        assert trainable_params == expected_lora_params
-        assert trainable_params == trainable_params_lora
-        assert expected_lora_params == trainable_params_lora
-        assert trainable_count == trainable_count_pre * 2
-
-
-    # optimizer = torch.optim.AdamW(
-    #     params, weight_decay=args.weight_decay, lr=args.learning_rate
-    # )
-
     optimizer = transformers.Adafactor(
         params,
         lr=cfg.params.learning_rate,
@@ -381,18 +255,18 @@ def main(cfg: DictConfig):
 
     scheduler = transformers.get_cosine_schedule_with_warmup(
         optimizer,
-        num_warmup_steps=int(0.05 * cfg.params.training_steps),
-        num_training_steps=cfg.params.training_steps * n_accumulation,
+        num_warmup_steps=int(0.05 * training_steps),
+        num_training_steps=training_steps * n_accumulation,
     )
     print("---- OPTIMIZER")
     print(optimizer)
 
     training_args = TrainingArguments(
         output_dir=f"~/supervised_finetuning/{cfg.params.dataset}/{cfg.params.backbone}/outputs",
-        per_device_train_batch_size=cfg.params.per_device_batch_size,
-        per_device_eval_batch_size=cfg.params.per_device_batch_size,
+        per_device_train_batch_size=4,
+        per_device_eval_batch_size=4,
         gradient_accumulation_steps=n_accumulation,
-        max_steps=cfg.params.training_steps * n_accumulation,
+        max_steps=training_steps * n_accumulation,
         max_grad_norm=1,
         logging_steps=5,
         logging_dir=f"~/supervised_finetuning/{cfg.params.dataset}/{cfg.params.backbone}/logs",
@@ -410,7 +284,6 @@ def main(cfg: DictConfig):
         seed=cfg.params.seed,
     )
     model.config.use_cache = False
-
 
     def compute_metrics(p):
         '''
@@ -475,11 +348,10 @@ def main(cfg: DictConfig):
     cfg.params.total_parameters = total
     cfg.params.training_parameters = learnable
 
-    # Log to wandb
+    # Log to wandb (ensuring only happens in the main process for distributed settings)
     if int(os.environ.get("LOCAL_RANK",0)) == 0:
         
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        
         # Log the relevant information to WANDB
         wandb.init(
             # adding the entity for now 
@@ -492,7 +364,6 @@ def main(cfg: DictConfig):
 
     # Have the model train
     trainer.train()
-
 
     if cfg.params.scaling_gamma:
         beta_list = []
