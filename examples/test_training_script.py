@@ -94,7 +94,23 @@ def calculate_lora_params(model, target_modules, lora_rank):
 def main(cfg: DictConfig):
     """ Main function that is ran when the script is run """
     # Set up your model training here using the passed configuration (cfg)
+
+
+    print(f"Actually running with location={cfg.params.spurious_location}, lora_rank={cfg.params.lora_rank}, proportion={cfg.params.spurious_proportion}, seed={cfg.params.seed}")
+
+    print(cfg.params.spurious_location)
+
+
+    print(type(cfg.params.superlinear))
+    print(cfg.params.superlinear)
+    print(type(cfg.params.pretrained_tokenizer))
+    print(cfg.params.pretrained_tokenizer)
+    print(cfg.params.vocab_size)
+    print(cfg.params.from_gcs)
+
     print(f"Using configuration: {cfg}")
+
+
 
     # setting the seed
     set_seed(cfg.params.seed)

@@ -5,7 +5,7 @@
 Install all the usual huggingface, Pytorch libraries. For ease, we provide the conda environment that was used for development into the file `environmnent.yml` (from running `conda env export --no-builds | grep -v "prefix" > environment.yml`) which you can then use to install a new environment with
 
 ```
-conda env create -n ENVNAME --file ENV.yml
+conda env create -n ENVNAME --file environment.yml
 ```
 
 Before running any script, make sure to set the following environment variables, e.g., by adding them to your `.bashrc`:
