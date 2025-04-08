@@ -46,6 +46,7 @@ def main():
         dataset=train_dataset,
         modifier=modifier,
         text_proportion=1.0,
+        seed=seed,
     )
 
     # highlight_func = highlight_from_file("spurious_corr/data/colors.txt")
