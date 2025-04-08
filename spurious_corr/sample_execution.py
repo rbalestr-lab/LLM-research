@@ -9,6 +9,7 @@ def main():
     dataset_name = "imdb"
     data = llm_research.data.from_name(dataset_name)
     train_dataset, test_dataset = data["train"], data["test"]
+    seed = 42
     
     date_generator = SpuriousDateGenerator(year_range=(1100, 2600), seed=42, with_replacement=True)
     # Create an injection modifier

@@ -75,7 +75,7 @@ class ItemInjection(Modifier):
     - from_file: Reading injection items from a file.
     - from_function: Using a custom function to generate injections.
     """
-    def __init__(self, injection_source, location: str = "random", token_proportion: float = 0.1):
+    def __init__(self, injection_source, location: str = "random", token_proportion: float = 0.1, seed=None):
         """
         Initialize an ItemInjection instance.
 
@@ -83,11 +83,13 @@ class ItemInjection(Modifier):
             injection_source (callable): A function that returns an injection token.
             location (str): Where to inject the token ("beginning", "random", "end").
             token_proportion (float): Proportion of tokens in the text to be affected.
+            seed (int, optional): Seed for reproducibility.
         """
         assert callable(injection_source), "injection_source must be callable"
         self.injection_source = injection_source
         self.location = location
         self.token_proportion = token_proportion
+        self.rng = random.Random(seed)
 
         assert 0 <= token_proportion <= 1, "token_proportion must be between 0 and 1"
         assert location in {"beginning", "random", "end"}, "location must be 'beginning', 'random', or 'end'"
@@ -105,73 +107,80 @@ class ItemInjection(Modifier):
         """
         words = text.split()
         num_tokens = len(words)
+
         # Ensure at least one token is injected
         num_to_inject = max(1, int(num_tokens * self.token_proportion))
+
         injections = [self.injection_source() for _ in range(num_to_inject)]
-        
+
         if self.location == "beginning":
             words = injections + words
         elif self.location == "end":
             words = words + injections
         elif self.location == "random":
             for injection in injections:
-                pos = random.randint(0, len(words))
+                pos = self.rng.randint(0, len(words))
                 words.insert(pos, injection)
-        return " ".join(words), label # return modified text and unchanged label
+
+        return " ".join(words), label  # return modified text and unchanged label
 
     @classmethod
-    def from_list(cls, items: list, location: str = "random", token_proportion: float = 0.1):
+    def from_list(cls, items: list, location: str = "random", token_proportion: float = 0.1, seed=None):
         """
-        Create an ItemInjection instance using a predefined list of injection items.
+        Create an ItemInjection instance using a predefined list of tokens.
 
         Args:
-            items (list): List of tokens (strings) to choose from.
-            location (str): Where to inject the tokens ("beginning", "random", "end").
-            token_proportion (float): Proportion of the text tokens to be affected.
-        
+            items (list): List of token strings to choose from.
+            location (str): Where to inject tokens ("beginning", "random", "end").
+            token_proportion (float): Proportion of text tokens to be affected.
+            seed (int, optional): Seed for reproducibility.
+
         Returns:
-            ItemInjection: Configured instance with a random choice injection source.
+            ItemInjection: Configured instance.
         """
+        rng = random.Random(seed)
         def injection_source():
-            return random.choice(items)
-        return cls(injection_source, location=location, token_proportion=token_proportion)
+            return rng.choice(items)
+        return cls(injection_source, location=location, token_proportion=token_proportion, seed=seed)
 
     @classmethod
-    def from_file(cls, file_path: str, location: str = "random", token_proportion: float = 0.1):
+    def from_file(cls, file_path: str, location: str = "random", token_proportion: float = 0.1, seed=None):
         """
-        Create an ItemInjection instance using items read from a file.
-        Each non-empty line in the file is treated as an injection item.
+        Create an ItemInjection instance using tokens read from a file.
+
+        Each non-empty line becomes a potential injection item.
 
         Args:
-            file_path (str): Path to the file containing injection items.
-            location (str): Where to inject the tokens ("beginning", "random", "end").
-            token_proportion (float): Proportion of the text tokens to be affected.
-        
+            file_path (str): Path to the file with one token per line.
+            location (str): Where to inject tokens.
+            token_proportion (float): Proportion of tokens to inject.
+            seed (int, optional): Seed for reproducibility.
+
         Returns:
-            ItemInjection: Configured instance using tokens from the file.
+            ItemInjection: Configured instance.
         """
         with open(file_path, "r", encoding="utf-8") as file:
             items = [line.strip() for line in file if line.strip()]
-        return cls.from_list(items, location=location, token_proportion=token_proportion)
+        return cls.from_list(items, location=location, token_proportion=token_proportion, seed=seed)
 
     @classmethod
-    def from_function(cls, injection_func, location: str = "random", token_proportion: float = 0.1):
+    def from_function(cls, injection_func, location: str = "random", token_proportion: float = 0.1, seed=None):
         """
-        Create an ItemInjection instance using a custom function that generates
-        a new injection item each time it is called.
+        Create an ItemInjection instance using a custom function to generate injections.
 
         Args:
-            injection_func (callable): Function that returns an injection item.
-            location (str): Where to inject the token ("beginning", "random", "end").
-            token_proportion (float): Proportion of the text tokens to be affected.
-        
+            injection_func (callable): Function that returns a new injection token each time.
+            location (str): Where to inject tokens.
+            token_proportion (float): Proportion of text to inject into.
+            seed (int, optional): Seed for reproducibility (used only for insertion position).
+
         Returns:
-            ItemInjection: Configured instance using the provided function.
+            ItemInjection: Configured instance.
         """
         assert callable(injection_func), "injection_func must be callable"
-        return cls(injection_func, location=location, token_proportion=token_proportion)
+        return cls(injection_func, location=location, token_proportion=token_proportion, seed=seed)
     
-
+    
 class HTMLInjection(Modifier):
     """
     A Modifier that injects HTML tags into a text.
