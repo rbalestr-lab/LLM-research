@@ -180,7 +180,7 @@ class ItemInjection(Modifier):
         assert callable(injection_func), "injection_func must be callable"
         return cls(injection_func, location=location, token_proportion=token_proportion, seed=seed)
     
-    
+
 class HTMLInjection(Modifier):
     """
     A Modifier that injects HTML tags into a text.
@@ -202,65 +202,68 @@ class HTMLInjection(Modifier):
         - If level=2, and the text is "<a>asdf <b> asdf sadf asdf </b> asdf asdf </a>", then the injection
           is performed only within the inner <b>...</b> region.
     """
-    def __init__(self, file_path: str, location: str = "random", level: int = None):
+
+    def __init__(self, file_path: str, location: str = "random", level: int = None, seed=None):
         """
         Initialize an HTMLInjection instance.
-        
+
         Args:
             file_path (str): Path to the file containing HTML tag definitions.
             location (str): Where to inject ("beginning", "random", or "end").
-            level (int): The nested HTML level at which to perform the injection. 
-                        None means anywhere in the text.
+            level (int): The nested HTML level at which to perform the injection.
+            seed (int, optional): Seed for deterministic random behavior.
         """
         with open(file_path, "r", encoding="utf-8") as f:
             self.tags = [line.strip() for line in f if line.strip()]
         self.location = location
         self.level = level
-    
-    @classmethod
-    def from_file(cls, file_path: str, location: str = "random", level: int = None):
-        """
-        Create an HTMLInjection instance by reading tag definitions from a file.
-        
-        Args:
-            file_path (str): Path to the file containing HTML tag definitions.
-            location (str): Where to inject ("beginning", "random", or "end").
-            level (int): The nested HTML level at which to perform the injection.
-        
-        Returns:
-            HTMLInjection: Configured instance using tags from the file.
-        """
-        return cls(file_path, location=location, level=level)
+        self.rng = random.Random(seed)
 
     @classmethod
-    def from_list(cls, tags: list, location: str = "random", level: int = None):
+    def from_file(cls, file_path: str, location: str = "random", level: int = None, seed=None):
+        """
+        Create an HTMLInjection instance from a file.
+
+        Args:
+            file_path (str): Path to the file containing tag definitions.
+            location (str): Injection location.
+            level (int): Nesting level.
+            seed (int, optional): Random seed.
+
+        Returns:
+            HTMLInjection: The configured instance.
+        """
+        return cls(file_path, location=location, level=level, seed=seed)
+
+    @classmethod
+    def from_list(cls, tags: list, location: str = "random", level: int = None, seed=None):
         """
         Create an HTMLInjection instance using a predefined list of tag definitions.
-        
+
         Args:
-            tags (list): A list of strings, each defining an HTML tag injection. Each string should
-                         either contain one token (a single tag) or two tokens (opening and closing tags).
-            location (str): Where to inject ("beginning", "random", or "end").
-            level (int): The nested HTML level at which to perform the injection.
-        
+            tags (list): List of tag strings (either single or opening/closing pairs).
+            location (str): Injection location.
+            level (int): Nesting level.
+            seed (int, optional): Random seed.
+
         Returns:
-            HTMLInjection: Configured instance using the provided list of tags.
+            HTMLInjection: The configured instance.
         """
         instance = cls.__new__(cls)
         instance.tags = tags
         instance.location = location
         instance.level = level
+        instance.rng = random.Random(seed)
         return instance
 
     def _choose_tag(self):
         """
         Randomly choose a tag from the loaded list.
-        
+
         Returns:
-            tuple: (opening_tag, closing_tag) if available; if only one token is provided,
-                   returns (tag, None).
+            tuple: (opening_tag, closing_tag or None)
         """
-        line = random.choice(self.tags)
+        line = self.rng.choice(self.tags)
         parts = line.split()
         if len(parts) >= 2:
             return parts[0], parts[1]
@@ -269,27 +272,27 @@ class HTMLInjection(Modifier):
 
     def _inject_into_tokens(self, tokens, opening, closing, location):
         """
-        Injects the opening (and optionally closing) tag into a list of tokens based on the location.
-        
+        Injects opening and closing tags into a token list based on location.
+
         Args:
-            tokens (list): List of tokens (words) from the target substring.
-            opening (str): The opening HTML tag to inject.
-            closing (str or None): The closing HTML tag to inject, if available.
-            location (str): Injection location ("beginning", "random", or "end").
-        
+            tokens (list): List of token strings.
+            opening (str): Opening tag.
+            closing (str or None): Closing tag.
+            location (str): Where to inject.
+
         Returns:
-            list: New list of tokens with the tags injected.
+            list: Modified token list.
         """
         if location == "beginning":
             new_tokens = [opening] + tokens[:]
             if closing:
-                pos = random.randint(1, len(new_tokens))
+                pos = self.rng.randint(1, len(new_tokens))
                 new_tokens.insert(pos, closing)
             return new_tokens
         elif location == "end":
             new_tokens = tokens[:]
             if closing:
-                pos = random.randint(0, len(new_tokens))
+                pos = self.rng.randint(0, len(new_tokens))
                 new_tokens.insert(pos, opening)
                 new_tokens.append(closing)
             else:
@@ -297,11 +300,10 @@ class HTMLInjection(Modifier):
             return new_tokens
         elif location == "random":
             new_tokens = tokens[:]
-            pos_open = random.randint(0, len(new_tokens))
+            pos_open = self.rng.randint(0, len(new_tokens))
             new_tokens.insert(pos_open, opening)
             if closing:
-                # Ensure closing tag is inserted after opening tag.
-                pos_close = random.randint(pos_open + 1, len(new_tokens))
+                pos_close = self.rng.randint(pos_open + 1, len(new_tokens))
                 new_tokens.insert(pos_close, closing)
             return new_tokens
         else:
@@ -309,14 +311,14 @@ class HTMLInjection(Modifier):
 
     def _inject(self, text, location):
         """
-        Performs injection on the given text (operating on the entire text).
-        
+        Injects HTML tags into the full text.
+
         Args:
-            text (str): The text to modify.
-            location (str): The injection location.
-        
+            text (str): Input text.
+            location (str): Injection location.
+
         Returns:
-            str: The text with injected HTML tag(s).
+            str: Modified text.
         """
         tokens = text.split()
         opening, closing = self._choose_tag()
@@ -325,16 +327,14 @@ class HTMLInjection(Modifier):
 
     def _find_level_span(self, text, level):
         """
-        Finds the first content span corresponding to the specified nesting level.
-        Assumes well-formed HTML.
-        
+        Find the first span inside the desired HTML nesting level.
+
         Args:
-            text (str): The HTML text.
-            level (int): The desired nesting level (0 for outermost, 1 for first tag, etc.).
-        
+            text (str): Input HTML text.
+            level (int): Desired nesting level.
+
         Returns:
-            tuple or None: (start_index, end_index) of the content inside the tag at the given level,
-                           or None if not found.
+            tuple or None: (start, end) of the content region, or None if not found.
         """
         tag_regex = re.compile(r"</?([a-zA-Z][a-zA-Z0-9]*)[^>]*>")
         stack = []
@@ -342,37 +342,28 @@ class HTMLInjection(Modifier):
             tag_str = match.group(0)
             tag_name = match.group(1)
             if not tag_str.startswith("</"):
-                # Opening tag: push (tag_name, end_index of opening tag)
                 stack.append((tag_name, match.end()))
             else:
                 if stack:
                     open_tag, start_index = stack.pop()
-                    # When the tag is closed, if the length of the stack becomes target_level - 1,
-                    # then the closed tag was at the target level.
                     if len(stack) == level - 1:
-                        span_start = start_index
-                        span_end = match.start()
-                        return (span_start, span_end)
+                        return (start_index, match.start())
         return None
-    
+
     def __call__(self, text: str, label):
         """
-        Injects HTML tag(s) into the text.
-        
-        If self.level is None, injection is performed on the entire text. Otherwise, the injection
-        is applied only within the first occurrence of a nested tag at the specified level.
-        
+        Inject HTML tags into the given text.
+
         Args:
-            text (str): The input text to modify.
-            label: The original label (unchanged).
+            text (str): Input text.
+            label: Associated label.
 
         Returns:
-            tuple: The modified text and the original label.
+            tuple: Modified text and original label.
         """
         if self.level is None:
             return self._inject(text, self.location), label
         elif self.level == 0:
-            # Wrap the entire text with the injection.
             opening, closing = self._choose_tag()
             if closing:
                 return f"{opening}{text}{closing}", label
@@ -381,7 +372,6 @@ class HTMLInjection(Modifier):
         else:
             span = self._find_level_span(text, self.level)
             if span is None:
-                # Fallback to free injection if the specified level is not found.
                 return self._inject(text, self.location), label
             start, end = span
             target = text[start:end]

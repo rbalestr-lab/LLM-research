@@ -11,10 +11,10 @@ def main():
     train_dataset, test_dataset = data["train"], data["test"]
     seed = 42
     
-    date_generator = SpuriousDateGenerator(year_range=(1100, 2600), seed=42, with_replacement=True)
+    date_generator = SpuriousDateGenerator(year_range=(1100, 2600), seed=seed, with_replacement=True)
     # Create an injection modifier
     modifier = ItemInjection.from_function(
-        date_generator, location="random", token_proportion=0.2
+        date_generator, location="random", token_proportion=0.2, seed=seed
     )
 
     # modifier = ItemInjection.from_file(
