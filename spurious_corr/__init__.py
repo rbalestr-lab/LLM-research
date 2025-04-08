@@ -9,7 +9,5 @@ text, and utilities for printing and highlighting text.
 
 from .modifiers import Modifier, CompositeModifier, ItemInjection, HTMLInjection
 from .transform import spurious_transform
-from .generators import (
-    spurious_date_generator
-)
+from .generators import SpuriousDateGenerator
 from .utils import pretty_print, pretty_print_dataset, highlight_dates, highlight_from_file, highlight_html

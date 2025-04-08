@@ -1,7 +1,7 @@
 import random
 from .transform import spurious_transform
 from .modifiers import CompositeModifier, ItemInjection, HTMLInjection
-from .generators import spurious_date_generator
+from .generators import SpuriousDateGenerator
 from .utils import pretty_print, pretty_print_dataset, highlight_dates, highlight_from_file, highlight_html
 import llm_research.data
 
@@ -10,9 +10,10 @@ def main():
     data = llm_research.data.from_name(dataset_name)
     train_dataset, test_dataset = data["train"], data["test"]
     
+    date_generator = SpuriousDateGenerator(year_range=(1100, 2600), seed=42, with_replacement=True)
     # Create an injection modifier
     modifier = ItemInjection.from_function(
-        spurious_date_generator, location="random", token_proportion=0.2
+        date_generator, location="random", token_proportion=0.2
     )
 
     # modifier = ItemInjection.from_file(
