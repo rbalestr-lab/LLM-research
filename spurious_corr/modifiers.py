@@ -11,25 +11,26 @@ import re
 
 class Modifier:
     """
-    Base class for applying modifications/corruptions to text.
+    Base class for applying modifications/corruptions to text-label pairs.
 
     Subclasses must implement the __call__ method to define specific transformations.
     
     Example:
         class MyModifier(Modifier):
-            def __call__(self, text: str) -> str:
+            def __call__(self, text: str, label: Any) -> tuple[str, Any]:
                 # custom transformation here
-                return transformed_text
+                return transformed_text, transformed_label
     """
-    def __call__(self, text: str) -> str:
+    def __call__(self, text: str, label):
         """
-        Apply the transformation to a single text instance.
+        Apply the transformation to a single text-label pair.
 
         Args:
             text (str): The input text to transform.
+            label: The associated label.
         
         Returns:
-            str: The transformed text.
+            tuple: (transformed_text, transformed_label)
         """
         raise NotImplementedError("Subclasses must implement __call__")
 
@@ -50,19 +51,20 @@ class CompositeModifier:
         """
         self.modifiers = modifiers
 
-    def __call__(self, text: str) -> str:
+    def __call__(self, text: str, label):
         """
-        Apply all modifiers sequentially to the input text.
-        
+        Apply all modifiers in sequence to the given (text, label).
+
         Args:
-            text (str): The original text to transform.
-        
+            text (str): The input text.
+            label: The associated label.
+
         Returns:
-            str: The text after applying all modifiers in order.
+            tuple: The modified (text, label) pair after all transformations.
         """
         for modifier in self.modifiers:
-            text = modifier(text)
-        return text
+            text, label = modifier(text, label)
+        return text, label
 
 
 class ItemInjection(Modifier):
@@ -90,15 +92,16 @@ class ItemInjection(Modifier):
         assert 0 <= token_proportion <= 1, "token_proportion must be between 0 and 1"
         assert location in {"beginning", "random", "end"}, "location must be 'beginning', 'random', or 'end'"
 
-    def __call__(self, text: str) -> str:
+    def __call__(self, text: str, label):
         """
-        Inject spurious tokens into the text.
+        Inject tokens into the text at specified locations.
 
         Args:
-            text (str): The original text.
-        
+            text (str): The input text to modify.
+            label: The original label (unchanged).
+
         Returns:
-            str: The text with injected tokens.
+            tuple: The modified text and the original label.
         """
         words = text.split()
         num_tokens = len(words)
@@ -114,7 +117,7 @@ class ItemInjection(Modifier):
             for injection in injections:
                 pos = random.randint(0, len(words))
                 words.insert(pos, injection)
-        return " ".join(words)
+        return " ".join(words), label # return modified text and unchanged label
 
     @classmethod
     def from_list(cls, items: list, location: str = "random", token_proportion: float = 0.1):
@@ -343,31 +346,35 @@ class HTMLInjection(Modifier):
                         return (span_start, span_end)
         return None
     
-    def __call__(self, text: str) -> str:
+    def __call__(self, text: str, label):
         """
         Injects HTML tag(s) into the text.
         
         If self.level is None, injection is performed on the entire text. Otherwise, the injection
         is applied only within the first occurrence of a nested tag at the specified level.
         
+        Args:
+            text (str): The input text to modify.
+            label: The original label (unchanged).
+
         Returns:
-            str: The modified text.
+            tuple: The modified text and the original label.
         """
         if self.level is None:
-            return self._inject(text, self.location)
+            return self._inject(text, self.location), label
         elif self.level == 0:
             # Wrap the entire text with the injection.
             opening, closing = self._choose_tag()
             if closing:
-                return f"{opening}{text}{closing}"
+                return f"{opening}{text}{closing}", label
             else:
-                return f"{opening}{text}{opening}"
+                return f"{opening}{text}{opening}", label
         else:
             span = self._find_level_span(text, self.level)
             if span is None:
                 # Fallback to free injection if the specified level is not found.
-                return self._inject(text, self.location)
+                return self._inject(text, self.location), label
             start, end = span
             target = text[start:end]
             injected = self._inject(target, self.location)
-            return text[:start] + injected + text[end:]
+            return text[:start] + injected + text[end:], label

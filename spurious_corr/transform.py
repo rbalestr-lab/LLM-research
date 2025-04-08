@@ -16,7 +16,7 @@ def spurious_transform(label_to_modify: int, dataset, modifier, text_proportion:
     Args:
         label_to_modify (int): The label of the text to modify.
         dataset: The dataset containing the text data.
-        modifier: An instance of a Modifier subclass that modifies text.
+        modifier: An instance of a Modifier subclass that modifies (text, label).
         text_proportion (float): Proportion of texts to transform using the modifier (between 0 and 1).
     
     Returns:
@@ -36,7 +36,9 @@ def spurious_transform(label_to_modify: int, dataset, modifier, text_proportion:
     def modify_text(example, idx):
         # Modify only if the current index is in the selected indices
         if idx in selected_indices:
-            example["text"] = modifier(example["text"])
+            new_text, new_label = modifier(example["text"], example["labels"])
+            example["text"] = new_text
+            example["labels"] = new_label
         return example
     
     modified_dataset = dataset_to_modify.map(modify_text, with_indices=True)
