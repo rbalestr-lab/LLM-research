@@ -27,10 +27,15 @@ import hydra
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
 import spurious_corr
-from spurious_corr.modify_dataset import inject_spurious_text
-from spurious_corr.modify_dataset import spurious_date_generator
-from spurious_corr.modify_dataset import spurious_text_from_file_generator
-from spurious_corr.modify_dataset import spurious_html_generator
+# from spurious_corr.generators import S
+# from spurious_corr.modify_dataset import spurious_date_generator
+# from spurious_corr.modify_dataset import spurious_text_from_file_generator
+# from spurious_corr.modify_dataset import spurious_html_generator
+from spurious_corr.modifiers import Modifier, CompositeModifier, ItemInjection, HTMLInjection
+from spurious_corr.transform import spurious_transform
+from spurious_corr.generators import SpuriousDateGenerator
+from spurious_corr.utils import pretty_print, pretty_print_dataset, highlight_dates, highlight_from_file, highlight_html
+
 import loraexp
 from loraexp.loraexp_lib import LoraConfigExp, get_peft_model_exp
 import llm_research
@@ -118,28 +123,32 @@ def main(cfg: DictConfig):
     # inject spurious correlation into the training dataset if spurious correlation is used
     if cfg.params.use_spurious:
         print("Using Spurious Correlation")
-
-        if cfg.params.use_list_dataset:
-            assert cfg.params.list_dataset_path
-            # "spurious_corr/two_hundred_dates.txt"
-            spurious_text_generator = spurious_corr.modify_dataset.spurious_text_from_file_generator(cfg.params.list_dataset_path)
-        elif cfg.params.spurious_type == "date":
-            spurious_text_generator = spurious_corr.modify_dataset.spurious_date_generator
-        elif cfg.params.spurious_type == "html":
-            spurious_text_generator = spurious_corr.modify_dataset.spurious_html_generator("spurious_corr/html.txt")
+        if cfg.params.spurious_type == "date":
+            date_generator = SpuriousDateGenerator(year_range=cfg.params.date_range, seed=cfg.params.seed, with_replacement=cfg.params.with_replacement)
+            modifier = ItemInjection.from_function(injection_func=date_generator, location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
+        # elif cfg.params.spurious_type == "html":
+        #     spurious_text_generator = spurious_corr.modify_dataset.spurious_html_generator("spurious_corr/html.txt")
+        elif cfg.params.spurious_type == "countries":
+            modifier = ItemInjection.from_file(file_path="spurious_corr/data/countries.txt", location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
 
         
         # make sure that the location is one of the acceptable locations
         assert (cfg.params.spurious_location == "random") or (cfg.params.spurious_location == "end") or (cfg.params.spurious_location == "beginning")
 
-        train_dataset = spurious_corr.modify_dataset.inject_spurious_text(
-            label_to_modify=cfg.params.spurious_label,
-            dataset=train_dataset,
-            proportion=cfg.params.spurious_proportion,
-            spurious_text_generator=spurious_text_generator,
-            location=cfg.params.spurious_location,
-            spurious_proportion=cfg.params.spurious_token_proportion,
-        )
+        train_dataset = spurious_transform(label_to_modify=cfg.params.spurious_label,
+                dataset=train_dataset,
+                modifier=modifier, 
+                text_proportion=cfg.params.spurious_proportion, 
+                seed=cfg.params.seed)
+
+        # train_dataset = spurious_corr.modify_dataset.inject_spurious_text(
+        #     label_to_modify=cfg.params.spurious_label,
+        #     dataset=train_dataset,
+        #     proportion=cfg.params.spurious_proportion,
+        #     spurious_text_generator=spurious_text_generator,
+        #     location=cfg.params.spurious_location,
+        #     spurious_proportion=cfg.params.spurious_token_proportion,
+        # )
 
 
     if cfg.params.pretrained_tokenizer:
@@ -242,26 +251,30 @@ def main(cfg: DictConfig):
     # spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_date_generator
     # spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_text_from_file_generator("spurious_corr/two_hundred_dates.txt")
 
-    if cfg.params.use_list_dataset:
-        assert cfg.params.list_dataset_path
-        # "spurious_corr/two_hundred_dates.txt"
-        spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_text_from_file_generator(cfg.params.list_dataset_path)
-    elif cfg.params.spurious_type == "date":
-        spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_date_generator
-    elif cfg.params.spurious_type == "html":
-        spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_html_generator("spurious_corr/html.txt")
+    if cfg.params.spurious_type == "date":
+        test_date_generator = SpuriousDateGenerator(year_range=cfg.params.date_range, seed=cfg.params.seed, with_replacement=cfg.params.with_replacement)
+        test_modifier = ItemInjection.from_function(injection_func=test_date_generator, location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_test_token_proportion, seed=cfg.params.seed)
+    # elif cfg.params.spurious_type == "html":
+    #     spurious_text_generator = spurious_corr.modify_dataset.spurious_html_generator("spurious_corr/html.txt")
+    elif cfg.params.spurious_type == "countries":
+        test_modifier = ItemInjection.from_file(file_path="spurious_corr/data/countries.txt", location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_test_token_proportion, seed=cfg.params.seed)
 
 
+    test_dataset_spur = spurious_transform(label_to_modify=cfg.params.spurious_test_label,
+                dataset=test_dataset,
+                modifier=test_modifier, 
+                text_proportion=cfg.params.spurious_test_proportion, 
+                seed=cfg.params.seed)
 
-    # generating the spurious testing dataset
-    test_dataset_spur = spurious_corr.modify_dataset.inject_spurious_text(
-        label_to_modify=cfg.params.spurious_test_label,
-        dataset=test_dataset,
-        proportion=cfg.params.spurious_test_proportion,
-        spurious_text_generator=spurious_text_generator_eval,
-        location=cfg.params.spurious_test_location,
-        spurious_proportion=cfg.params.spurious_test_token_proportion
-    )
+    # # generating the spurious testing dataset
+    # test_dataset_spur = spurious_corr.modify_dataset.inject_spurious_text(
+    #     label_to_modify=cfg.params.spurious_test_label,
+    #     dataset=test_dataset,
+    #     proportion=cfg.params.spurious_test_proportion,
+    #     spurious_text_generator=spurious_text_generator_eval,
+    #     location=cfg.params.spurious_test_location,
+    #     spurious_proportion=cfg.params.spurious_test_token_proportion
+    # )
 
     # tokenize the test_dataset and test_dataset_spur so that the model can use it
     test_dataset = test_dataset.map(
