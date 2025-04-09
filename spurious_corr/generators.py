@@ -1,0 +1,100 @@
+"""
+generators.py
+
+This module provides generator functions for creating spurious text injections.
+These functions can be used directly or integrated with the ItemInjection modifier.
+"""
+
+import random
+import calendar
+
+# def spurious_date_generator():
+#     """
+#     Generates a random date between 1900 and 2100 in the format YYYY-MM-DD.
+
+#     Returns:
+#         str: A randomly generated date string.
+#     """
+#     year = random.randint(1900, 2100)
+#     month = random.randint(1, 12)
+
+#     # Get the correct number of days in the selected month and year
+#     _, max_day = calendar.monthrange(year, month)
+#     day = random.randint(1, max_day)
+
+#     return f"{year}-{month:02d}-{day:02d}"
+
+# def spurious_date_list_generator(list_length, with_replacement=False):
+#     """
+#     Generates a random date in the format YYYY-MM-DD to use as a spurious injection.
+
+#     Returns:
+#         str: A randomly generated date string.
+#     """
+#     year = random.randint(1900, 2100)
+#     month = random.randint(1, 12)
+#     day = random.randint(1, 28)  # To avoid invalid dates
+#     return f"{year}-{month:02d}-{day:02d}"
+
+class SpuriousDateGenerator:
+    """
+    Generates random date strings in YYYY-MM-DD format.
+
+    Can be configured to allow or disallow duplicates.
+    """
+    def __init__(self, year_range=(1100, 2600), seed=None, with_replacement=False):
+        """
+        Initialize the generator.
+
+        Args:
+            year_range (tuple): A (start_year, end_year) tuple.
+            seed (int, optional): Seed for reproducibility.
+            with_replacement (bool): Whether to allow duplicates.
+        """
+        self.rng = random.Random(seed)
+        self.with_replacement = with_replacement
+        self.generated = set()
+        self.possible_dates = self._generate_all_valid_dates(year_range)
+        self.total_possible = len(self.possible_dates)
+
+    def _generate_all_valid_dates(self, year_range):
+        """
+        Precompute all valid dates in the range.
+
+        Args:
+            year_range (tuple): A (start_year, end_year) tuple.
+
+        Returns:
+            list[str]: List of all valid dates in the range.
+        """
+        start_year, end_year = year_range
+        dates = []
+        for year in range(start_year, end_year + 1):
+            for month in range(1, 13):
+                _, max_day = calendar.monthrange(year, month)
+                for day in range(1, max_day + 1):
+                    date_str = f"{year}-{month:02d}-{day:02d}"
+                    dates.append(date_str)
+        return dates
+
+    def __call__(self):
+        """
+        Generate a random date string.
+
+        Returns:
+            str: A random date string.
+
+        Raises:
+            RuntimeError: If all unique dates have been generated (when with_replacement is False).
+        """
+        if self.with_replacement:
+            return self.rng.choice(self.possible_dates)
+
+        if len(self.generated) >= self.total_possible:
+            raise RuntimeError("All unique dates have been generated.")
+
+        while True:
+            date = self.rng.choice(self.possible_dates)
+            if date not in self.generated:
+                self.generated.add(date)
+                return date
