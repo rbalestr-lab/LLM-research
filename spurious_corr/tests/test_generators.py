@@ -10,7 +10,7 @@ def test_no_duplicates_with_replacement_false():
         assert date not in generated
         generated.add(date)
 
-def test_same_seed_produces_same_sequence():
+def test_same_seed_produces_same_sequence_no_replacement():
     g1 = SpuriousDateGenerator(year_range=(1900, 2100), seed=42, with_replacement=False)
     g2 = SpuriousDateGenerator(year_range=(1900, 2100), seed=42, with_replacement=False)
     
@@ -19,9 +19,28 @@ def test_same_seed_produces_same_sequence():
     
     assert dates1 == dates2
 
-def test_different_seed_produces_different_sequence():
+def test_same_seed_produces_same_sequence_with_replacement():
+    g1 = SpuriousDateGenerator(year_range=(1900, 2100), seed=42, with_replacement=True)
+    g2 = SpuriousDateGenerator(year_range=(1900, 2100), seed=42, with_replacement=True)
+    
+    dates1 = [g1() for _ in range(10000)]
+    dates2 = [g2() for _ in range(10000)]
+    
+    assert dates1 == dates2
+
+def test_different_seed_produces_different_sequence_no_replacement():
     g1 = SpuriousDateGenerator(year_range=(1900, 2100), seed=42, with_replacement=False)
     g2 = SpuriousDateGenerator(year_range=(1900, 2100), seed=42, with_replacement=False)
+    
+    dates1 = [g1() for _ in range(10000)]
+    dates2 = [g2() for _ in range(10000)]
+    
+    assert dates1 == dates2
+
+
+def test_different_seed_produces_different_sequence_with_replacement():
+    g1 = SpuriousDateGenerator(year_range=(1900, 2100), seed=42, with_replacement=True)
+    g2 = SpuriousDateGenerator(year_range=(1900, 2100), seed=42, with_replacement=True)
     
     dates1 = [g1() for _ in range(10000)]
     dates2 = [g2() for _ in range(10000)]

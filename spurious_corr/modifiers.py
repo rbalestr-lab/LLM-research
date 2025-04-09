@@ -75,7 +75,7 @@ class ItemInjection(Modifier):
     - from_file: Reading injection items from a file.
     - from_function: Using a custom function to generate injections.
     """
-    def __init__(self, injection_source, location: str = "random", token_proportion: float = 0.1, seed=None):
+    def __init__(self, injection_source, location: str = "random", token_proportion: float = 0.1, seed=None, _rng=None):
         """
         Initialize an ItemInjection instance.
 
@@ -89,7 +89,7 @@ class ItemInjection(Modifier):
         self.injection_source = injection_source
         self.location = location
         self.token_proportion = token_proportion
-        self.rng = random.Random(seed)
+        self.rng = _rng or random.Random(seed)
 
         assert 0 <= token_proportion <= 1, "token_proportion must be between 0 and 1"
         assert location in {"beginning", "random", "end"}, "location must be 'beginning', 'random', or 'end'"
@@ -141,7 +141,7 @@ class ItemInjection(Modifier):
         rng = random.Random(seed)
         def injection_source():
             return rng.choice(items)
-        return cls(injection_source, location=location, token_proportion=token_proportion, seed=seed)
+        return cls(injection_source, location=location, token_proportion=token_proportion, seed=seed, _rng=rng)
 
     @classmethod
     def from_file(cls, file_path: str, location: str = "random", token_proportion: float = 0.1, seed=None):
@@ -161,7 +161,12 @@ class ItemInjection(Modifier):
         """
         with open(file_path, "r", encoding="utf-8") as file:
             items = [line.strip() for line in file if line.strip()]
-        return cls.from_list(items, location=location, token_proportion=token_proportion, seed=seed)
+
+        rng = random.Random(seed) 
+        def injection_source():
+            return rng.choice(items)
+
+        return cls(injection_source, location=location, token_proportion=token_proportion, _rng=rng)
 
     @classmethod
     def from_function(cls, injection_func, location: str = "random", token_proportion: float = 0.1, seed=None):
