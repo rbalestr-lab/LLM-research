@@ -14,7 +14,7 @@ def main():
     date_generator = SpuriousDateGenerator(year_range=(1100, 2600), seed=seed, with_replacement=True)
     # Create an injection modifier
     modifier = ItemInjection.from_function(
-        date_generator, location="random", token_proportion=0.2, seed=seed
+        date_generator, location="random", token_proportion=0, seed=seed
     )
 
     # modifier = ItemInjection.from_file(
