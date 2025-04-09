@@ -2,6 +2,7 @@ import os
 import transformers
 import torch
 import datetime
+from torch.utils.data import Subset
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -48,6 +49,10 @@ import bitsandbytes
 from sklearn import metrics
 import numpy as np
 from loraexp.loraexp_lib import LoraConfigExp, get_peft_model_exp
+import matplotlib.pyplot as plt
+
+from tahv import 
+
 
 LARGE_MODELS = [
     "meta-llama/Meta-Llama-3-8B",
@@ -67,8 +72,84 @@ def set_seed(seed: int):
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)  # For multi-GPU training
-    # torch.backends.cudnn.deterministic = True  # Ensures deterministic behavior
-    # torch.backends.cudnn.benchmark = False  # Disables optimization for non-deterministic algorithms
+
+def evaluate_heads(model, dataset, tokenizer, batch_size):
+    torch.cuda.empty_cache()
+    device = "cuda"
+    model.eval()
+    with torch.no_grad():
+        indices = list(range(5))  # Indices of the first 5 samples
+        limited_dataset = Subset(dataset, indices)
+        final_attention_layer = []
+        dataloader = torch.utils.data.DataLoader(
+            limited_dataset, shuffle=False, batch_size=5
+        )
+        batch_count = 0
+        for batch in tqdm(dataloader):
+            input_ids = batch["input_ids"].to(device)
+            masks =  batch["attention_mask"].to(device)
+            labs = batch["labels"].to(device)
+            inpts = {
+                "input_ids": input_ids,
+                "attention_mask": masks,
+                "labels": labs
+            }
+            
+            outputs = model(**inpts, output_attentions=True)  # Force attentions
+            attentions = outputs.attentions
+            final_attention_layer.append(attentions)
+            final_attentions = attentions[-1]
+            create_attention_figures(final_attentions, tokenizer, limited_dataset, 0, 0, input_ids, batch_count)
+
+            # detach everything to conserve CUDA memory
+            del input_ids, masks, labs, inpts, outputs
+            torch.cuda.empty_cache()
+            # add to the overall attention list 
+            batch_count += 1
+
+        final_layer_attentions = final_attention_layer[0][-1] # Shape is (batch, num_heads, sequence_length, sequence_length)
+
+    return final_layer_attentions
+
+def create_attention_figures(attentions, tokenizer, dataset, head_idx, example_idx, input_ids, batch_cnt):
+    scores = attentions[example_idx, head_idx, :, :].cpu()
+    input_tokens = tokenizer.convert_ids_to_tokens(input_ids[example_idx].cpu().numpy())
+
+
+    # Create the heatmap using Matplotlib
+    plt.figure(figsize=(12, 10))  # Larger figure size
+    plt.imshow(scores, cmap='viridis')
+    
+    # Adjust font size based on number of tokens
+    token_fontsize = max(6, 12 - len(input_tokens)//10)
+    
+    # Set the ticks and labels with better spacing
+    plt.xticks(ticks=np.arange(len(input_tokens)), 
+               labels=input_tokens, 
+               rotation=90,  # Vertical labels for better readability
+               fontsize=token_fontsize)
+    plt.yticks(ticks=np.arange(len(input_tokens)), 
+               labels=input_tokens,
+               fontsize=token_fontsize)
+    
+    # Only overlay text if there aren't too many tokens
+    if len(input_tokens) <= 15:
+        for i in range(len(input_tokens)):
+            for j in range(len(input_tokens)):
+                plt.text(j, i, f"{scores[i, j]:.2f}", 
+                        ha='center', va='center', 
+                        fontsize=max(5, 8 - len(input_tokens)//10), 
+                        color='white', weight='bold')
+    
+    plt.title(f'Attention Scores for Head {head_idx}')
+    plt.xlabel('Input Tokens')
+    plt.ylabel('Input Tokens')
+    plt.tight_layout()  # Ensure everything fits
+    plt.show()
+    plt.savefig(f"attention_batch{batch_cnt}.png", dpi=300, bbox_inches="tight")
+
+
+
 
 
 def calculate_lora_params(model, target_modules, lora_rank):
@@ -90,7 +171,7 @@ def main(cfg: DictConfig):
     """ Main function that is ran when the script is run """
     # Set up your model training here using the passed configuration (cfg)
     print(f"Using configuration: {cfg}")
-
+    torch.cuda.empty_cache()
     # setting the seed
     set_seed(cfg.params.seed)
     assert np.random.get_state()[1][0] == cfg.params.seed
@@ -168,6 +249,7 @@ def main(cfg: DictConfig):
         torch_dtype=torch.float32 if cfg.params.backbone not in LARGE_MODELS else torch.bfloat16,
         max_length=cfg.params.max_length,
         from_gcs=from_gcs,
+        out_attentions=True,
     )
     
     # applying LoRA to the model if it is wanted
@@ -386,20 +468,17 @@ def main(cfg: DictConfig):
     )
     print("---- OPTIMIZER")
     print(optimizer)
-    best_model_path = os.path.expanduser(f"~/spurious_corr/{cfg.params.dataset}/{cfg.params.backbone}/{cfg.params.seed}/{cfg.params.lora_rank}/{cfg.params.spurious_type}/{cfg.params.spurious_proportion}/{cfg.params.spurious_token_proportion}/outputs")
-    logging_path = os.path.expanduser(f"~/spurious_corr/{cfg.params.dataset}/{cfg.params.backbone}/{cfg.params.seed}/{cfg.params.lora_rank}/{cfg.params.spurious_type}/{cfg.params.spurious_proportion}/{cfg.params.spurious_token_proportion}/logs")
 
     training_args = TrainingArguments(
-        output_dir=best_model_path,
+        output_dir=f"~/supervised_finetuning/{cfg.params.dataset}/{cfg.params.backbone}/outputs",
         per_device_train_batch_size=cfg.params.per_device_batch_size,
         per_device_eval_batch_size=cfg.params.per_device_batch_size,
         gradient_accumulation_steps=n_accumulation,
         max_steps=cfg.params.training_steps * n_accumulation,
         max_grad_norm=1,
         logging_steps=5,
-        logging_dir=logging_path,
-        save_steps=cfg.params.training_steps,
-        save_total_limit=1,  # keep only the best checkpoint
+        logging_dir=f"~/supervised_finetuning/{cfg.params.dataset}/{cfg.params.backbone}/logs",
+        #        save_steps=100,
         eval_accumulation_steps=1,
         eval_strategy="steps",
         eval_steps=cfg.params.eval_steps,
@@ -407,9 +486,7 @@ def main(cfg: DictConfig):
         gradient_checkpointing=False,
         report_to="wandb",
         overwrite_output_dir="True",
-        save_strategy="steps",
-        metric_for_best_model="NonSpurious_balanced_accuracy",  # Track best model based on accuracy
-        greater_is_better=True,
+        save_strategy="no",
         load_best_model_at_end=False,
         fp16=False,
         seed=cfg.params.seed,
@@ -496,15 +573,12 @@ def main(cfg: DictConfig):
         )
 
     # Have the model train
+
     trainer.train()
+    attentions = evaluate_heads(model, test_dataset, tokenizer, cfg.params.per_device_batch_size)
 
-    # save the final model
-    model_save_path = os.path.expanduser(f"~/spurious_corr/{cfg.params.dataset}/{cfg.params.backbone}/{cfg.params.seed}/{cfg.params.lora_rank}/{cfg.params.spurious_type}/{cfg.params.spurious_proportion}/{cfg.params.spurious_token_proportion}/final_model")
-    trainer.save_model(model_save_path)
+    # print(attentions)
 
-    # if int(os.environ.get("LOCAL_RANK", 0)) == 0:
-    #     wandb.save(model_save_path)  # Uploads the model to wandb
-    #     wandb.save(best_model_path)
 
     if cfg.params.scaling_gamma:
         beta_list = []
