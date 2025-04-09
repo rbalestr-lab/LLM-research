@@ -220,7 +220,7 @@ class CustomBackboneHead(transformers.PreTrainedModel):
             loss=loss,
             logits=logits,
             hidden_states=None,  # outputs.hidden_states,
-            attentions=None,  # outputs.attentions,
+            attentions=outputs.attentions,  # outputs.attentions,
         )
 
 

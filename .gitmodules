@@ -1,3 +1,6 @@
 [submodule "llm_reconstruction_free/OpenELM-450M"]
 	path = llm_reconstruction_free/OpenELM-450M
 	url = https://huggingface.co/apple/OpenELM-450M
+[submodule "tahv"]
+	path = tahv
+	url = https://github.com/jiesutd/Text-Attention-Heatmap-Visualization.git

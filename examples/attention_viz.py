@@ -50,8 +50,8 @@ from sklearn import metrics
 import numpy as np
 from loraexp.loraexp_lib import LoraConfigExp, get_peft_model_exp
 import matplotlib.pyplot as plt
+from tahv.text_attention import generate
 
-from tahv import 
 
 
 LARGE_MODELS = [
@@ -73,7 +73,7 @@ def set_seed(seed: int):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)  # For multi-GPU training
 
-def evaluate_heads(model, dataset, tokenizer, batch_size):
+def evaluate_heads(model, dataset, tokenizer, batch_size, attention_path):
     torch.cuda.empty_cache()
     device = "cuda"
     model.eval()
@@ -99,7 +99,7 @@ def evaluate_heads(model, dataset, tokenizer, batch_size):
             attentions = outputs.attentions
             final_attention_layer.append(attentions)
             final_attentions = attentions[-1]
-            create_attention_figures(final_attentions, tokenizer, limited_dataset, 0, 0, input_ids, batch_count)
+            create_attention_figures(final_attentions, tokenizer, limited_dataset, 0, 0, input_ids, batch_count, attention_path)
 
             # detach everything to conserve CUDA memory
             del input_ids, masks, labs, inpts, outputs
@@ -111,42 +111,55 @@ def evaluate_heads(model, dataset, tokenizer, batch_size):
 
     return final_layer_attentions
 
-def create_attention_figures(attentions, tokenizer, dataset, head_idx, example_idx, input_ids, batch_cnt):
-    scores = attentions[example_idx, head_idx, :, :].cpu()
+def create_attention_figures(attentions, tokenizer, dataset, head_idx, example_idx, input_ids, batch_cnt, attention_path):
+# Extract attention scores for specific head and example
+    scores = attentions[example_idx, head_idx, :, :].cpu().numpy()
+    
+    # Convert token IDs to words
     input_tokens = tokenizer.convert_ids_to_tokens(input_ids[example_idx].cpu().numpy())
+    # Aggregate attention (e.g., average across query positions)
+    token_weights = scores.mean(axis=0)  # Or use CLS token attention: scores[0, :]
+    # Merge subword tokens (e.g., "un" + "##want" + "##ed" → "unwanted"
+    words, merged_weights = merge_subwords(input_tokens, token_weights)
+    # Normalize weights to 0-100 scale for TAHV
+    normalized_weights = (merged_weights / max(merged_weights) * 100).astype(int)
+    # Generate TAHV visualization
+    attention_path += f"/head{head_idx}.tex"
 
+    directory = os.path.dirname(attention_path)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
 
-    # Create the heatmap using Matplotlib
-    plt.figure(figsize=(12, 10))  # Larger figure size
-    plt.imshow(scores, cmap='viridis')
+    generate(
+        text_list=words,
+        attention_list=normalized_weights,
+        latex_file=attention_path
+    )
+
+def merge_subwords(tokens, weights):
+    merged_words = []
+    merged_weights = []
+    current_word = ""
+    current_weight = 0
     
-    # Adjust font size based on number of tokens
-    token_fontsize = max(6, 12 - len(input_tokens)//10)
+    for token, weight in zip(tokens, weights):
+        if token.startswith("##"):
+            current_word += token[2:]
+            current_weight += weight
+        else:
+            if "[PAD]" not in token:
+                if current_word:  # Add previous merged word
+                    merged_words.append(current_word)
+                    merged_weights.append(current_weight)
+                current_word = token
+                current_weight = weight
     
-    # Set the ticks and labels with better spacing
-    plt.xticks(ticks=np.arange(len(input_tokens)), 
-               labels=input_tokens, 
-               rotation=90,  # Vertical labels for better readability
-               fontsize=token_fontsize)
-    plt.yticks(ticks=np.arange(len(input_tokens)), 
-               labels=input_tokens,
-               fontsize=token_fontsize)
-    
-    # Only overlay text if there aren't too many tokens
-    if len(input_tokens) <= 15:
-        for i in range(len(input_tokens)):
-            for j in range(len(input_tokens)):
-                plt.text(j, i, f"{scores[i, j]:.2f}", 
-                        ha='center', va='center', 
-                        fontsize=max(5, 8 - len(input_tokens)//10), 
-                        color='white', weight='bold')
-    
-    plt.title(f'Attention Scores for Head {head_idx}')
-    plt.xlabel('Input Tokens')
-    plt.ylabel('Input Tokens')
-    plt.tight_layout()  # Ensure everything fits
-    plt.show()
-    plt.savefig(f"attention_batch{batch_cnt}.png", dpi=300, bbox_inches="tight")
+    # Add the last word
+    if current_word:
+        merged_words.append(current_word)
+        merged_weights.append(current_weight)
+        
+    return merged_words, merged_weights
 
 
 
@@ -249,7 +262,6 @@ def main(cfg: DictConfig):
         torch_dtype=torch.float32 if cfg.params.backbone not in LARGE_MODELS else torch.bfloat16,
         max_length=cfg.params.max_length,
         from_gcs=from_gcs,
-        out_attentions=True,
     )
     
     # applying LoRA to the model if it is wanted
@@ -575,7 +587,9 @@ def main(cfg: DictConfig):
     # Have the model train
 
     trainer.train()
-    attentions = evaluate_heads(model, test_dataset, tokenizer, cfg.params.per_device_batch_size)
+
+    latex_file = os.path.expanduser(f"~/spurious_corr/{cfg.params.dataset}/{cfg.params.backbone}/{cfg.params.seed}/{cfg.params.lora_rank}/{cfg.params.spurious_type}/{cfg.params.spurious_proportion}/{cfg.params.spurious_token_proportion}/attentions")
+    attentions = evaluate_heads(model, test_dataset, tokenizer, cfg.params.per_device_batch_size, latex_file)
 
     # print(attentions)
 
