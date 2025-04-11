@@ -520,9 +520,10 @@ def main(cfg: DictConfig):
         model_save_path = os.path.expanduser(f"~/spurious_corr/{cfg.params.dataset}/{cfg.params.backbone}/{cfg.params.seed}/{cfg.params.lora_rank}/{cfg.params.spurious_type}/{cfg.params.spurious_proportion}/{cfg.params.spurious_token_proportion}/final_model")
         trainer.save_model(model_save_path)
 
-    # if int(os.environ.get("LOCAL_RANK", 0)) == 0:
-    #     wandb.save(model_save_path)  # Uploads the model to wandb
-    #     wandb.save(best_model_path)
+    if int(os.environ.get("LOCAL_RANK", 0)) == 0:
+        removed_files = train_dataset.cleanup_cache_files()
+        # wandb.save(model_save_path)  # Uploads the model to wandb
+        # wandb.save(best_model_path)
 
     if cfg.params.scaling_gamma:
         beta_list = []
