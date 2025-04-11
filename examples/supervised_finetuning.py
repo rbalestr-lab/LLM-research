@@ -76,7 +76,7 @@ def set_seed(seed: int):
     # torch.backends.cudnn.benchmark = False  # Disables optimization for non-deterministic algorithms
 
 
-def calculate_lora_params(model, target_modules, lora_rank):
+def calculate_lora_params(model, target_modules, lora_rank, using_dora=False):
     """ Function that calculates the expected number of LoRA parameters to verify that it is functioning correctly """
     trainable_count_pre = 0
     total_lora_params = 0
@@ -86,7 +86,10 @@ def calculate_lora_params(model, target_modules, lora_rank):
                 trainable_count_pre += 1
                 input_dim = module.weight.size(1)
                 output_dim = module.weight.size(0)
-                total_lora_params += ((lora_rank * input_dim) + (lora_rank * output_dim))
+                if using_dora:
+                    total_lora_params += ((lora_rank * input_dim) + (lora_rank * output_dim) + output_dim)
+                else:
+                    total_lora_params += ((lora_rank * input_dim) + (lora_rank * output_dim))
     return total_lora_params, trainable_count_pre
 
 
@@ -185,7 +188,7 @@ def main(cfg: DictConfig):
         if cfg.params.lora0 != 0 or cfg.params.mixture != 0 or cfg.params.superlinear != "none":
             # used to verify that Lora is being applied properly
             target_modules = llm_research.utils.name_to_lora(cfg.params.backbone)
-            expected_lora_params, trainable_count_pre = calculate_lora_params(model, target_modules, cfg.params.lora_rank)
+            expected_lora_params, trainable_count_pre = calculate_lora_params(model, target_modules, cfg.params.lora_rank, cfg.params.use_dora)
 
             config = LoraConfigExp(
                 r=cfg.params.lora_rank,
@@ -198,6 +201,7 @@ def main(cfg: DictConfig):
                 m=cfg.params.mixture if cfg.params.mixture != 0 else None,
                 superlinear=cfg.params.superlinear if cfg.params.superlinear != "none" else None,
                 use_scaling_gamma=cfg.params.scaling_gamma,
+                use_dora=cfg.params.use_dora,
             )
             print(config)
             model.backbone.requires_grad_(False)
@@ -206,7 +210,7 @@ def main(cfg: DictConfig):
         else:
             # used to verify that Lora is being applied properly
             target_modules = llm_research.utils.name_to_lora(cfg.params.backbone)
-            expected_lora_params, trainable_count_pre = calculate_lora_params(model, target_modules, cfg.params.lora_rank)
+            expected_lora_params, trainable_count_pre = calculate_lora_params(model, target_modules, cfg.params.lora_rank, cfg.params.use_dora)
 
             config = LoraConfig(
                 r=cfg.params.lora_rank,
@@ -420,7 +424,7 @@ def main(cfg: DictConfig):
         gradient_checkpointing=False,
         report_to="wandb",
         overwrite_output_dir="True",
-        save_strategy="steps",
+        save_strategy="no", # "steps" to enable saving 
         metric_for_best_model="NonSpurious_balanced_accuracy",  # Track best model based on accuracy
         greater_is_better=True,
         load_best_model_at_end=False,
@@ -512,8 +516,9 @@ def main(cfg: DictConfig):
     trainer.train()
 
     # save the final model
-    model_save_path = os.path.expanduser(f"~/spurious_corr/{cfg.params.dataset}/{cfg.params.backbone}/{cfg.params.seed}/{cfg.params.lora_rank}/{cfg.params.spurious_type}/{cfg.params.spurious_proportion}/{cfg.params.spurious_token_proportion}/final_model")
-    trainer.save_model(model_save_path)
+    if int(os.environ.get("LOCAL_RANK",0)) == 0 and cfg.params.seed == 5:
+        model_save_path = os.path.expanduser(f"~/spurious_corr/{cfg.params.dataset}/{cfg.params.backbone}/{cfg.params.seed}/{cfg.params.lora_rank}/{cfg.params.spurious_type}/{cfg.params.spurious_proportion}/{cfg.params.spurious_token_proportion}/final_model")
+        trainer.save_model(model_save_path)
 
     # if int(os.environ.get("LOCAL_RANK", 0)) == 0:
     #     wandb.save(model_save_path)  # Uploads the model to wandb
