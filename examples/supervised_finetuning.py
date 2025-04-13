@@ -144,16 +144,6 @@ def main(cfg: DictConfig):
                 text_proportion=cfg.params.spurious_proportion, 
                 seed=cfg.params.seed)
 
-        # train_dataset = spurious_corr.modify_dataset.inject_spurious_text(
-        #     label_to_modify=cfg.params.spurious_label,
-        #     dataset=train_dataset,
-        #     proportion=cfg.params.spurious_proportion,
-        #     spurious_text_generator=spurious_text_generator,
-        #     location=cfg.params.spurious_location,
-        #     spurious_proportion=cfg.params.spurious_token_proportion,
-        # )
-
-
     if cfg.params.pretrained_tokenizer:
         tokenizer = llm_research.tokenizer.from_model(
             cfg.params.backbone, from_gcs=from_gcs
@@ -270,15 +260,6 @@ def main(cfg: DictConfig):
                 text_proportion=cfg.params.spurious_test_proportion, 
                 seed=cfg.params.seed)
 
-    # # generating the spurious testing dataset
-    # test_dataset_spur = spurious_corr.modify_dataset.inject_spurious_text(
-    #     label_to_modify=cfg.params.spurious_test_label,
-    #     dataset=test_dataset,
-    #     proportion=cfg.params.spurious_test_proportion,
-    #     spurious_text_generator=spurious_text_generator_eval,
-    #     location=cfg.params.spurious_test_location,
-    #     spurious_proportion=cfg.params.spurious_test_token_proportion
-    # )
 
     # tokenize the test_dataset and test_dataset_spur so that the model can use it
     test_dataset = test_dataset.map(
