@@ -33,9 +33,9 @@ fi
 
 
 for spur_type in "date"; do
-    for seed in  45 50; do
+    for seed in 50; do
         for location in "end"; do
-            for lora_rank in  1 2 4 8 16 32 64; do
+            for lora_rank in 4 8 16 32 64; do
                 for proportion in 0 0.25 0.5 0.75 1; do
                     for token_proportion in 0; do
 
