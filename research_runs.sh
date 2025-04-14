@@ -17,7 +17,7 @@ fi
 #45 50
 
 for spur_type in "date"; do
-    for seed in 40 45 50; do
+    for seed in 40; do
         for location in "end" "beginning" "start"; do
             for lora_rank in 16 32 64; do
                 for proportion in  0 0.25 0.5 0.75 1; do
