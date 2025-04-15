@@ -4,6 +4,7 @@ set -e
 
 export HF_DATASETS_CACHE=/opt/dlami/nvme/hf_cache
 export TRANSFORMERS_CACHE=/opt/dlami/nvme/hf_cache
+export HF_HOME=/opt/dlami/nvme/hf_cache
 
 # Part 1: Signing in to Wandb
 # -------------------------------------------------------------------------
