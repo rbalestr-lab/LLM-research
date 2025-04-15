@@ -54,6 +54,11 @@ from sklearn import metrics
 import numpy as np
 from loraexp.loraexp_lib import LoraConfigExp, get_peft_model_exp
 
+os.environ["HF_HOME"] = "/opt/dlami/nvme/hf_cache"
+os.environ["HF_DATASETS_CACHE"] = "/opt/dlami/nvme/hf_cache/datasets"
+os.environ["TRANSFORMERS_CACHE"] = "/opt/dlami/nvme/hf_cache/models"
+
+
 LARGE_MODELS = [
     "meta-llama/Meta-Llama-3-8B",
     "Qwen/Qwen2-7B",
@@ -66,6 +71,7 @@ LARGE_MODELS = [
     "apple/OpenELM-3B",
     ]
 
+
 # setting the seed for reproducibility
 def set_seed(seed: int):
     """Function that sets all the seeds to make our results reproducible"""
@@ -74,6 +80,7 @@ def set_seed(seed: int):
     torch.cuda.manual_seed_all(seed)  # For multi-GPU training
     # torch.backends.cudnn.deterministic = True  # Ensures deterministic behavior
     # torch.backends.cudnn.benchmark = False  # Disables optimization for non-deterministic algorithms
+
 
 
 def calculate_lora_params(model, target_modules, lora_rank, using_dora=False):
@@ -501,8 +508,8 @@ def main(cfg: DictConfig):
         model_save_path = os.path.expanduser(f"~/spurious_corr/{cfg.params.dataset}/{cfg.params.backbone}/{cfg.params.seed}/{cfg.params.lora_rank}/{cfg.params.spurious_type}/{cfg.params.spurious_proportion}/{cfg.params.spurious_token_proportion}/final_model")
         trainer.save_model(model_save_path)
 
-    if int(os.environ.get("LOCAL_RANK", 0)) == 0:
-        removed_files = train_dataset.cleanup_cache_files()
+    # if int(os.environ.get("LOCAL_RANK", 0)) == 0:
+    #     removed_files = train_dataset.cleanup_cache_files()
         # wandb.save(model_save_path)  # Uploads the model to wandb
         # wandb.save(best_model_path)
 
