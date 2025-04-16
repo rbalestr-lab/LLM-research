@@ -73,7 +73,7 @@ def from_name(name: str, from_gcs: str = None):
     else:
         data = DatasetDict()
         for split in splits:
-            data[split] = load_dataset(name, split=split)
+            data[split] = load_dataset(name, split=split) # cache_dir="/opt/dlami/nvme/hf_cache/datasets"
     for split in splits:
         if "label" in data[split].column_names:
             data[split] = data[split].rename_column("label", "labels")
