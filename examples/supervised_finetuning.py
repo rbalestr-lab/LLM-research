@@ -1,4 +1,8 @@
 import os
+os.environ["HF_HOME"] = "/opt/dlami/nvme/hf_cache"
+os.environ["HF_DATASETS_CACHE"] = "/opt/dlami/nvme/hf_cache/datasets"
+os.environ["TRANSFORMERS_CACHE"] = "/opt/dlami/nvme/hf_cache/models"
+
 import transformers
 import torch
 import datetime
@@ -54,9 +58,7 @@ from sklearn import metrics
 import numpy as np
 from loraexp.loraexp_lib import LoraConfigExp, get_peft_model_exp
 
-os.environ["HF_HOME"] = "/opt/dlami/nvme/hf_cache"
-os.environ["HF_DATASETS_CACHE"] = "/opt/dlami/nvme/hf_cache/datasets"
-os.environ["TRANSFORMERS_CACHE"] = "/opt/dlami/nvme/hf_cache/models"
+
 
 
 LARGE_MODELS = [
