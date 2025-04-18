@@ -35,13 +35,11 @@ fi
 #         done
 #     done
 # done
-
-
 for spur_type in "date"; do
     for seed in 45; do
         for location in "beginning"; do
-            for lora_rank in  16; do
-                for proportion in 1; do
+            for lora_rank in 32; do
+                for proportion in 0.5 0.75 1; do
                     for token_proportion in 0.1; do
 
                         echo "Running with location=$location, lora_rank=$lora_rank, proportion=$proportion, seed=$seed"
@@ -53,11 +51,10 @@ for spur_type in "date"; do
         done
     done
 done
-
 for spur_type in "date"; do
     for seed in 45; do
         for location in "beginning"; do
-            for lora_rank in 32 64; do
+            for lora_rank in 64; do
                 for proportion in 0 0.25 0.5 0.75 1; do
                     for token_proportion in 0.1; do
 
