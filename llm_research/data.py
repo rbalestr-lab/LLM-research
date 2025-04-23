@@ -34,7 +34,8 @@ NAMES = [
     "ucirvine/sms_spam",
     "Bhuvaneshwari/intent_classification",
     "valurank/Topic_Classification",
-    "common_sense"
+    "common_sense",
+    "financial_classification"
 ]
 
 
@@ -58,6 +59,8 @@ def from_name(name: str, from_gcs: str = None):
         name = "medical_questions_pairs"
     elif name == "common_sense":
         name = "tau/commonsense_qa"
+    elif name == "financial_classification":
+        name = "nickmuchi/financial-classification"
     print(f"Loading {name}")
     local_cache = None
     if from_gcs:
