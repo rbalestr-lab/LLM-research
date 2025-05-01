@@ -52,6 +52,7 @@ from loraexp.loraexp_lib import LoraConfigExp, get_peft_model_exp
 
 import matplotlib.pyplot as plt
 from tahv.text_attention import generate
+import re
 
 
 
@@ -74,18 +75,17 @@ def set_seed(seed: int):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)  # For multi-GPU training
 
-def evaluate_heads(model, dataset, tokenizer, batch_size, attention_path):
+def evaluate_heads(model, dataset_spur, dataset_clean, tokenizer, batch_size, attention_path):
     torch.cuda.empty_cache()
     device = "cuda"
     model.eval()
-    labels = []
 
     with torch.no_grad():
         indices = list(range(1))  # Indices of the first 1 samples
         # spurious categories to see how attention works
-        spur_data = dataset.filter(lambda example: example["labels"] == 1)
+        spur_data = dataset_spur.filter(lambda example: example["labels"] == 1 and example["has_spurious"] == True)
         # non spurious category to see how attention works
-        non_spur_data = dataset.filter(lambda example: example["labels"] != 1)
+        non_spur_data = dataset_clean.filter(lambda example: example["labels"] != 1)
 
         # make a subset of the datasets
         # limited_dataset_spur = Subset(spur_data, indices)
@@ -100,7 +100,7 @@ def evaluate_heads(model, dataset, tokenizer, batch_size, attention_path):
         )
 
         batch_count = 0
-        for i in range(20):
+        for i in range(6):
             limited_dataset_spur = Subset(spur_data, [i])
             dataloader_spur = torch.utils.data.DataLoader(
                 limited_dataset_spur, shuffle=False, batch_size=1
@@ -119,9 +119,9 @@ def evaluate_heads(model, dataset, tokenizer, batch_size, attention_path):
                 outputs = model(**inpts, output_attentions=True)  # Force attentions
                 attentions = outputs.attentions
                 final_attention_layer.append(attentions)
-                labels.append(labs)
                 final_attentions = attentions[-1]
-                create_attention_figures(final_attentions, tokenizer, limited_dataset_spur, 0, 0, input_ids, batch_count, attention_path, "spur", i)
+                for j in range(10):
+                    create_attention_figures(final_attentions, tokenizer, limited_dataset_spur, j, 0, input_ids, batch_count, attention_path, "spur", i)
 
                 # detach everything to conserve CUDA memory
                 del input_ids, masks, labs, inpts, outputs
@@ -144,9 +144,9 @@ def evaluate_heads(model, dataset, tokenizer, batch_size, attention_path):
             outputs = model(**inpts, output_attentions=True)  # Force attentions
             attentions = outputs.attentions
             final_attention_layer.append(attentions)
-            labels.append(labs)
             final_attentions = attentions[-1]
-            create_attention_figures(final_attentions, tokenizer, limited_dataset_clean, 0, 0, input_ids, batch_count, attention_path, "clean",0)
+            for j in range(10):
+                create_attention_figures(final_attentions, tokenizer, limited_dataset_clean, j, 0, input_ids, batch_count, attention_path, "clean",0)
 
             # detach everything to conserve CUDA memory
             del input_ids, masks, labs, inpts, outputs
@@ -156,13 +156,11 @@ def evaluate_heads(model, dataset, tokenizer, batch_size, attention_path):
 
         # final_layer_attentions = final_attention_layer[0][-1] # Shape is (batch, num_heads, sequence_length, sequence_length)
 
-    print(labels)
     # return final_layer_attentions
 
 def create_attention_figures(attentions, tokenizer, dataset, head_idx, example_idx, input_ids, batch_cnt, attention_path, cleanOrSpur, sample_id):
 # Extract attention scores for specific head and example
     scores = attentions[example_idx, head_idx, :, :].cpu().numpy()
-    
     # Convert token IDs to words
     input_tokens = tokenizer.convert_ids_to_tokens(input_ids[example_idx].cpu().numpy())
     # Aggregate attention (e.g., average across query positions)
@@ -187,27 +185,41 @@ def create_attention_figures(attentions, tokenizer, dataset, head_idx, example_i
 def merge_subwords(tokens, weights):
     merged_words = []
     merged_weights = []
-    current_word = ""
-    current_weight = 0
-    
-    for token, weight in zip(tokens, weights):
+
+    i = 0
+    while i < len(tokens):
+        token = tokens[i]
+
+        # Try to match a date pattern starting from current index
+        date_candidate = ""
+        date_indices = []
+        j = i
+        while j < len(tokens) and len(date_candidate.replace("-", "")) < 8:  # date length approx
+            clean_token = tokens[j].replace("##", "")
+            if clean_token in {"-", "–"} or re.match(r"\d+", clean_token):
+                date_candidate += clean_token
+                date_indices.append(j)
+                j += 1
+            else:
+                break
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_candidate):
+            merged_words.append(date_candidate)
+            merged_weights.append(sum(weights[k] for k in date_indices))
+            i = j
+            continue
+
+        # Merge regular subwords
         if token.startswith("##"):
-            current_word += token[2:]
-            current_weight += weight
+            merged_words[-1] += token[2:]
+            merged_weights[-1] += weights[i]
         else:
             if "[PAD]" not in token:
-                if current_word:  # Add previous merged word
-                    merged_words.append(current_word)
-                    merged_weights.append(current_weight)
-                current_word = token
-                current_weight = weight
-    
-    # Add the last word
-    if current_word:
-        merged_words.append(current_word)
-        merged_weights.append(current_weight)
-        
+                merged_words.append(token)
+                merged_weights.append(weights[i])
+        i += 1
+
     return merged_words, merged_weights
+
 
 def calculate_lora_params(model, target_modules, lora_rank, using_dora=False):
     """ Function that calculates the expected number of LoRA parameters to verify that it is functioning correctly """
@@ -628,9 +640,9 @@ def main(cfg: DictConfig):
 
     # Have the model train
     trainer.train()
-
-    latex_file = os.path.expanduser(f"~/spurious_corr/{cfg.params.dataset}/{cfg.params.backbone}/{cfg.params.seed}/{cfg.params.lora_rank}/{cfg.params.spurious_type}/{cfg.params.spurious_proportion}/{cfg.params.spurious_token_proportion}/attentions")
-    evaluate_heads(model, test_dataset, tokenizer, cfg.params.per_device_batch_size, latex_file)
+    if int(os.environ.get("LOCAL_RANK",0)) == 0:
+        latex_file = os.path.expanduser(f"~/spurious_corr/{cfg.params.dataset}/{cfg.params.backbone}/{cfg.params.seed}/{cfg.params.lora_rank}/{cfg.params.spurious_type}/{cfg.params.spurious_proportion}/{cfg.params.spurious_token_proportion}/attentions")
+        evaluate_heads(model, test_dataset_spur, test_dataset, tokenizer, cfg.params.per_device_batch_size, latex_file)
 
     # save the final model
     if int(os.environ.get("LOCAL_RANK",0)) == 0 and cfg.params.seed == 5:

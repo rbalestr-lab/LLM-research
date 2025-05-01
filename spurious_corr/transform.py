@@ -43,6 +43,9 @@ def spurious_transform(label_to_modify: int, dataset, modifier, text_proportion:
             new_text, new_label = modifier(example["text"], example["labels"])
             example["text"] = new_text
             example["labels"] = new_label
+            example["has_spurious"] = True  # Tag spurious injection
+        else:
+            example["has_spurious"] = False
         return example
 
     modified_dataset = dataset_to_modify.map(modify_text, with_indices=True)
