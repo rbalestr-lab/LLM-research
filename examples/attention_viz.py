@@ -28,10 +28,10 @@ import hydra
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
 import spurious_corr
-from spurious_corr.modify_dataset import inject_spurious_text
-from spurious_corr.modify_dataset import spurious_date_generator
-from spurious_corr.modify_dataset import spurious_text_from_file_generator
-from spurious_corr.modify_dataset import spurious_html_generator
+from spurious_corr.modifiers import Modifier, CompositeModifier, ItemInjection, HTMLInjection
+from spurious_corr.transform import spurious_transform
+from spurious_corr.generators import SpuriousDateGenerator
+from spurious_corr.utils import pretty_print, pretty_print_dataset, highlight_dates, highlight_from_file, highlight_html
 import loraexp
 from loraexp.loraexp_lib import LoraConfigExp, get_peft_model_exp
 import llm_research
@@ -49,6 +49,7 @@ import bitsandbytes
 from sklearn import metrics
 import numpy as np
 from loraexp.loraexp_lib import LoraConfigExp, get_peft_model_exp
+
 import matplotlib.pyplot as plt
 from tahv.text_attention import generate
 
@@ -77,15 +78,60 @@ def evaluate_heads(model, dataset, tokenizer, batch_size, attention_path):
     torch.cuda.empty_cache()
     device = "cuda"
     model.eval()
+    labels = []
+
     with torch.no_grad():
-        indices = list(range(5))  # Indices of the first 5 samples
-        limited_dataset = Subset(dataset, indices)
+        indices = list(range(1))  # Indices of the first 1 samples
+        # spurious categories to see how attention works
+        spur_data = dataset.filter(lambda example: example["labels"] == 1)
+        # non spurious category to see how attention works
+        non_spur_data = dataset.filter(lambda example: example["labels"] != 1)
+
+        # make a subset of the datasets
+        # limited_dataset_spur = Subset(spur_data, indices)
+        limited_dataset_clean = Subset(non_spur_data, indices)
+
         final_attention_layer = []
-        dataloader = torch.utils.data.DataLoader(
-            limited_dataset, shuffle=False, batch_size=5
+        # dataloader_spur = torch.utils.data.DataLoader(
+        #     limited_dataset_spur, shuffle=False, batch_size=1
+        # )
+        dataloader_clean = torch.utils.data.DataLoader(
+            limited_dataset_clean, shuffle=False, batch_size=1
         )
+
         batch_count = 0
-        for batch in tqdm(dataloader):
+        for i in range(20):
+            limited_dataset_spur = Subset(spur_data, [i])
+            dataloader_spur = torch.utils.data.DataLoader(
+                limited_dataset_spur, shuffle=False, batch_size=1
+            )
+            #figure on the spurious samples
+            for batch in tqdm(dataloader_spur):
+                input_ids = batch["input_ids"].to(device)
+                masks =  batch["attention_mask"].to(device)
+                labs = batch["labels"].to(device)
+                inpts = {
+                    "input_ids": input_ids,
+                    "attention_mask": masks,
+                    "labels": labs
+                }
+                
+                outputs = model(**inpts, output_attentions=True)  # Force attentions
+                attentions = outputs.attentions
+                final_attention_layer.append(attentions)
+                labels.append(labs)
+                final_attentions = attentions[-1]
+                create_attention_figures(final_attentions, tokenizer, limited_dataset_spur, 0, 0, input_ids, batch_count, attention_path, "spur", i)
+
+                # detach everything to conserve CUDA memory
+                del input_ids, masks, labs, inpts, outputs
+                torch.cuda.empty_cache()
+                # add to the overall attention list 
+                batch_count += 1
+
+        batch_count = 0
+        # figure on the clean samples   
+        for batch in tqdm(dataloader_clean):
             input_ids = batch["input_ids"].to(device)
             masks =  batch["attention_mask"].to(device)
             labs = batch["labels"].to(device)
@@ -98,8 +144,9 @@ def evaluate_heads(model, dataset, tokenizer, batch_size, attention_path):
             outputs = model(**inpts, output_attentions=True)  # Force attentions
             attentions = outputs.attentions
             final_attention_layer.append(attentions)
+            labels.append(labs)
             final_attentions = attentions[-1]
-            create_attention_figures(final_attentions, tokenizer, limited_dataset, 0, 0, input_ids, batch_count, attention_path)
+            create_attention_figures(final_attentions, tokenizer, limited_dataset_clean, 0, 0, input_ids, batch_count, attention_path, "clean",0)
 
             # detach everything to conserve CUDA memory
             del input_ids, masks, labs, inpts, outputs
@@ -107,11 +154,12 @@ def evaluate_heads(model, dataset, tokenizer, batch_size, attention_path):
             # add to the overall attention list 
             batch_count += 1
 
-        final_layer_attentions = final_attention_layer[0][-1] # Shape is (batch, num_heads, sequence_length, sequence_length)
+        # final_layer_attentions = final_attention_layer[0][-1] # Shape is (batch, num_heads, sequence_length, sequence_length)
 
-    return final_layer_attentions
+    print(labels)
+    # return final_layer_attentions
 
-def create_attention_figures(attentions, tokenizer, dataset, head_idx, example_idx, input_ids, batch_cnt, attention_path):
+def create_attention_figures(attentions, tokenizer, dataset, head_idx, example_idx, input_ids, batch_cnt, attention_path, cleanOrSpur, sample_id):
 # Extract attention scores for specific head and example
     scores = attentions[example_idx, head_idx, :, :].cpu().numpy()
     
@@ -124,7 +172,7 @@ def create_attention_figures(attentions, tokenizer, dataset, head_idx, example_i
     # Normalize weights to 0-100 scale for TAHV
     normalized_weights = (merged_weights / max(merged_weights) * 100).astype(int)
     # Generate TAHV visualization
-    attention_path += f"/head{head_idx}.tex"
+    attention_path += f"/{cleanOrSpur}/{sample_id}/head{head_idx}.tex"
 
     directory = os.path.dirname(attention_path)
     if not os.path.exists(directory):
@@ -161,11 +209,7 @@ def merge_subwords(tokens, weights):
         
     return merged_words, merged_weights
 
-
-
-
-
-def calculate_lora_params(model, target_modules, lora_rank):
+def calculate_lora_params(model, target_modules, lora_rank, using_dora=False):
     """ Function that calculates the expected number of LoRA parameters to verify that it is functioning correctly """
     trainable_count_pre = 0
     total_lora_params = 0
@@ -175,7 +219,10 @@ def calculate_lora_params(model, target_modules, lora_rank):
                 trainable_count_pre += 1
                 input_dim = module.weight.size(1)
                 output_dim = module.weight.size(0)
-                total_lora_params += ((lora_rank * input_dim) + (lora_rank * output_dim))
+                if using_dora:
+                    total_lora_params += ((lora_rank * input_dim) + (lora_rank * output_dim) + output_dim)
+                else:
+                    total_lora_params += ((lora_rank * input_dim) + (lora_rank * output_dim))
     return total_lora_params, trainable_count_pre
 
 
@@ -184,7 +231,7 @@ def main(cfg: DictConfig):
     """ Main function that is ran when the script is run """
     # Set up your model training here using the passed configuration (cfg)
     print(f"Using configuration: {cfg}")
-    torch.cuda.empty_cache()
+
     # setting the seed
     set_seed(cfg.params.seed)
     assert np.random.get_state()[1][0] == cfg.params.seed
@@ -212,29 +259,23 @@ def main(cfg: DictConfig):
     # inject spurious correlation into the training dataset if spurious correlation is used
     if cfg.params.use_spurious:
         print("Using Spurious Correlation")
-
-        if cfg.params.use_list_dataset:
-            assert cfg.params.list_dataset_path
-            # "spurious_corr/two_hundred_dates.txt"
-            spurious_text_generator = spurious_corr.modify_dataset.spurious_text_from_file_generator(cfg.params.list_dataset_path)
-        elif cfg.params.spurious_type == "date":
-            spurious_text_generator = spurious_corr.modify_dataset.spurious_date_generator
-        elif cfg.params.spurious_type == "html":
-            spurious_text_generator = spurious_corr.modify_dataset.spurious_html_generator("spurious_corr/html.txt")
+        if cfg.params.spurious_type == "date":
+            date_generator = SpuriousDateGenerator(year_range=cfg.params.date_range, seed=cfg.params.seed, with_replacement=cfg.params.with_replacement)
+            modifier = ItemInjection.from_function(injection_func=date_generator, location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
+        # elif cfg.params.spurious_type == "html":
+        #     spurious_text_generator = spurious_corr.modify_dataset.spurious_html_generator("spurious_corr/html.txt")
+        elif cfg.params.spurious_type == "countries":
+            modifier = ItemInjection.from_file(file_path="spurious_corr/data/countries.txt", location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
 
         
         # make sure that the location is one of the acceptable locations
         assert (cfg.params.spurious_location == "random") or (cfg.params.spurious_location == "end") or (cfg.params.spurious_location == "beginning")
 
-        train_dataset = spurious_corr.modify_dataset.inject_spurious_text(
-            label_to_modify=cfg.params.spurious_label,
-            dataset=train_dataset,
-            proportion=cfg.params.spurious_proportion,
-            spurious_text_generator=spurious_text_generator,
-            location=cfg.params.spurious_location,
-            spurious_proportion=cfg.params.spurious_token_proportion,
-        )
-
+        train_dataset = spurious_transform(label_to_modify=cfg.params.spurious_label,
+                dataset=train_dataset,
+                modifier=modifier, 
+                text_proportion=cfg.params.spurious_proportion, 
+                seed=cfg.params.seed)
 
     if cfg.params.pretrained_tokenizer:
         tokenizer = llm_research.tokenizer.from_model(
@@ -270,7 +311,7 @@ def main(cfg: DictConfig):
         if cfg.params.lora0 != 0 or cfg.params.mixture != 0 or cfg.params.superlinear != "none":
             # used to verify that Lora is being applied properly
             target_modules = llm_research.utils.name_to_lora(cfg.params.backbone)
-            expected_lora_params, trainable_count_pre = calculate_lora_params(model, target_modules, cfg.params.lora_rank)
+            expected_lora_params, trainable_count_pre = calculate_lora_params(model, target_modules, cfg.params.lora_rank, cfg.params.use_dora)
 
             config = LoraConfigExp(
                 r=cfg.params.lora_rank,
@@ -283,6 +324,7 @@ def main(cfg: DictConfig):
                 m=cfg.params.mixture if cfg.params.mixture != 0 else None,
                 superlinear=cfg.params.superlinear if cfg.params.superlinear != "none" else None,
                 use_scaling_gamma=cfg.params.scaling_gamma,
+                use_dora=cfg.params.use_dora,
             )
             print(config)
             model.backbone.requires_grad_(False)
@@ -291,7 +333,7 @@ def main(cfg: DictConfig):
         else:
             # used to verify that Lora is being applied properly
             target_modules = llm_research.utils.name_to_lora(cfg.params.backbone)
-            expected_lora_params, trainable_count_pre = calculate_lora_params(model, target_modules, cfg.params.lora_rank)
+            expected_lora_params, trainable_count_pre = calculate_lora_params(model, target_modules, cfg.params.lora_rank, cfg.params.use_dora)
 
             config = LoraConfig(
                 r=cfg.params.lora_rank,
@@ -336,26 +378,21 @@ def main(cfg: DictConfig):
     # spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_date_generator
     # spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_text_from_file_generator("spurious_corr/two_hundred_dates.txt")
 
-    if cfg.params.use_list_dataset:
-        assert cfg.params.list_dataset_path
-        # "spurious_corr/two_hundred_dates.txt"
-        spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_text_from_file_generator(cfg.params.list_dataset_path)
-    elif cfg.params.spurious_type == "date":
-        spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_date_generator
-    elif cfg.params.spurious_type == "html":
-        spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_html_generator("spurious_corr/html.txt")
+    if cfg.params.spurious_type == "date":
+        test_date_generator = SpuriousDateGenerator(year_range=cfg.params.date_range, seed=cfg.params.seed, with_replacement=cfg.params.with_replacement)
+        test_modifier = ItemInjection.from_function(injection_func=test_date_generator, location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_test_token_proportion, seed=cfg.params.seed)
+    # elif cfg.params.spurious_type == "html":
+    #     spurious_text_generator = spurious_corr.modify_dataset.spurious_html_generator("spurious_corr/html.txt")
+    elif cfg.params.spurious_type == "countries":
+        test_modifier = ItemInjection.from_file(file_path="spurious_corr/data/countries.txt", location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_test_token_proportion, seed=cfg.params.seed)
 
 
+    test_dataset_spur = spurious_transform(label_to_modify=cfg.params.spurious_test_label,
+                dataset=test_dataset,
+                modifier=test_modifier, 
+                text_proportion=cfg.params.spurious_test_proportion, 
+                seed=cfg.params.seed)
 
-    # generating the spurious testing dataset
-    test_dataset_spur = spurious_corr.modify_dataset.inject_spurious_text(
-        label_to_modify=cfg.params.spurious_test_label,
-        dataset=test_dataset,
-        proportion=cfg.params.spurious_test_proportion,
-        spurious_text_generator=spurious_text_generator_eval,
-        location=cfg.params.spurious_test_location,
-        spurious_proportion=cfg.params.spurious_test_token_proportion
-    )
 
     # tokenize the test_dataset and test_dataset_spur so that the model can use it
     test_dataset = test_dataset.map(
@@ -480,17 +517,20 @@ def main(cfg: DictConfig):
     )
     print("---- OPTIMIZER")
     print(optimizer)
+    best_model_path = os.path.expanduser(f"~/spurious_corr/{cfg.params.dataset}/{cfg.params.backbone}/{cfg.params.seed}/{cfg.params.lora_rank}/{cfg.params.spurious_type}/{cfg.params.spurious_proportion}/{cfg.params.spurious_token_proportion}/outputs")
+    logging_path = os.path.expanduser(f"~/spurious_corr/{cfg.params.dataset}/{cfg.params.backbone}/{cfg.params.seed}/{cfg.params.lora_rank}/{cfg.params.spurious_type}/{cfg.params.spurious_proportion}/{cfg.params.spurious_token_proportion}/logs")
 
     training_args = TrainingArguments(
-        output_dir=f"~/supervised_finetuning/{cfg.params.dataset}/{cfg.params.backbone}/outputs",
+        output_dir=best_model_path,
         per_device_train_batch_size=cfg.params.per_device_batch_size,
         per_device_eval_batch_size=cfg.params.per_device_batch_size,
         gradient_accumulation_steps=n_accumulation,
         max_steps=cfg.params.training_steps * n_accumulation,
         max_grad_norm=1,
         logging_steps=5,
-        logging_dir=f"~/supervised_finetuning/{cfg.params.dataset}/{cfg.params.backbone}/logs",
-        #        save_steps=100,
+        logging_dir=logging_path,
+        save_steps=cfg.params.training_steps,
+        save_total_limit=1,  # keep only the best checkpoint
         eval_accumulation_steps=1,
         eval_strategy="steps",
         eval_steps=cfg.params.eval_steps,
@@ -498,7 +538,9 @@ def main(cfg: DictConfig):
         gradient_checkpointing=False,
         report_to="wandb",
         overwrite_output_dir="True",
-        save_strategy="no",
+        save_strategy="no", # "steps" to enable saving 
+        metric_for_best_model="NonSpurious_balanced_accuracy",  # Track best model based on accuracy
+        greater_is_better=True,
         load_best_model_at_end=False,
         fp16=False,
         seed=cfg.params.seed,
@@ -581,18 +623,24 @@ def main(cfg: DictConfig):
             project="LLM-spurious-correlation",
             config=OmegaConf.to_container(cfg.params, resolve=True),
             group=f"dataset={cfg.params.dataset}-backbone={cfg.params.backbone}",
-            name=f"{cfg.params.backbone} on {cfg.params.dataset} [{timestamp}], Lora Rank {cfg.params.lora_rank}, Spurious Correlation: {cfg.params.use_spurious} at {cfg.params.spurious_location}, proportion: {cfg.params.spurious_proportion}, spurious token proportion: {cfg.params.spurious_token_proportion}, spurious type: {cfg.params.spurious_type}, Pretrained: {cfg.params.pretrained}, Frozen: {cfg.params.freeze}, List Generator: {cfg.params.use_list_dataset}",
+            name=f"{cfg.params.backbone} on {cfg.params.dataset} [{timestamp}], Lora Rank {cfg.params.lora_rank}, Spurious Correlation: {cfg.params.use_spurious} at {cfg.params.spurious_location}, proportion: {cfg.params.spurious_proportion}, spurious token proportion: {cfg.params.spurious_token_proportion}, spurious type: {cfg.params.spurious_type}, Pretrained: {cfg.params.pretrained}, Frozen: {cfg.params.freeze}, List Generator: {cfg.params.use_list_dataset} seed: {cfg.params.seed}",
         )
 
     # Have the model train
-
     trainer.train()
 
     latex_file = os.path.expanduser(f"~/spurious_corr/{cfg.params.dataset}/{cfg.params.backbone}/{cfg.params.seed}/{cfg.params.lora_rank}/{cfg.params.spurious_type}/{cfg.params.spurious_proportion}/{cfg.params.spurious_token_proportion}/attentions")
-    attentions = evaluate_heads(model, test_dataset, tokenizer, cfg.params.per_device_batch_size, latex_file)
+    evaluate_heads(model, test_dataset, tokenizer, cfg.params.per_device_batch_size, latex_file)
 
-    # print(attentions)
+    # save the final model
+    if int(os.environ.get("LOCAL_RANK",0)) == 0 and cfg.params.seed == 5:
+        model_save_path = os.path.expanduser(f"~/spurious_corr/{cfg.params.dataset}/{cfg.params.backbone}/{cfg.params.seed}/{cfg.params.lora_rank}/{cfg.params.spurious_type}/{cfg.params.spurious_proportion}/{cfg.params.spurious_token_proportion}/final_model")
+        trainer.save_model(model_save_path)
 
+    # if int(os.environ.get("LOCAL_RANK", 0)) == 0:
+    #     removed_files = train_dataset.cleanup_cache_files()
+        # wandb.save(model_save_path)  # Uploads the model to wandb
+        # wandb.save(best_model_path)
 
     if cfg.params.scaling_gamma:
         beta_list = []
