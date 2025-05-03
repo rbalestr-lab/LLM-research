@@ -79,4 +79,4 @@ fi
 echo "Starting training..."
 # python examples/supervised_finetuning.py --multirun --config-dir ./examples --config-name hydra "$@"
 
-python examples/attention_viz.py --multirun --config-dir ./examples --config-name hydra.yaml ++params.spurious_proportion=0.5 ++params.spurious_token_proportion=0.1 ++params.spurious_location=random ++params.spurious_test_proportion=0.5 ++params.spurious_test_token_proportion=0.1 ++params.spurious_test_location=random ++params.lora_rank=1 ++params.spurious_type=date ++params.seed=50 ++params.backbone=Snowflake/snowflake-arctic-embed-xs ++params.dataset=imdb ++freeze=1 ++params.pretrained=True
+python examples/attention_viz.py --multirun --config-dir ./examples --config-name hydra.yaml ++params.spurious_proportion=0.5 ++params.spurious_token_proportion=0 ++params.spurious_location=random ++params.spurious_test_proportion=0.5 ++params.spurious_test_token_proportion=0 ++params.spurious_test_location=random ++params.lora_rank=1 ++params.spurious_type=date ++params.seed=50 ++params.backbone=Snowflake/snowflake-arctic-embed-xs ++params.dataset=financial_classification ++params.freeze=1 ++params.pretrained=True

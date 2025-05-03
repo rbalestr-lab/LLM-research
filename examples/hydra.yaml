@@ -29,7 +29,7 @@ trainer:
   loss:
     with_bias: true
   hardware:
-    world_size: 1  # You can set this based on the number of GPUs you are using
+    world_size: 2  # You can set this based on the number of GPUs you are using
 
 params:
   dataset: rotten_tomatoes
