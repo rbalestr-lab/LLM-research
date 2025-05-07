@@ -34,7 +34,7 @@ trainer:
 params:
   dataset: rotten_tomatoes
   seed: 50
-  per_device_batch_size: 12 #2
+  per_device_batch_size: 11 #2
   freeze: 0
   pretrained: true
   use_spurious: true
