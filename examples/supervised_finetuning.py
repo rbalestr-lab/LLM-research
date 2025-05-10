@@ -138,8 +138,8 @@ def main(cfg: DictConfig):
         if cfg.params.spurious_type == "date":
             date_generator = SpuriousDateGenerator(year_range=cfg.params.date_range, seed=cfg.params.seed, with_replacement=cfg.params.with_replacement)
             modifier = ItemInjection.from_function(injection_func=date_generator, location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
-        # elif cfg.params.spurious_type == "html":
-        #     spurious_text_generator = spurious_corr.modify_dataset.spurious_html_generator("spurious_corr/html.txt")
+        elif cfg.params.spurious_type == "html":
+            modifier = HTMLInjection.from_file("spurious_corr/data/html_tags.txt", location=cfg.params.spurious_location, seed=cfg.params.seed)
         elif cfg.params.spurious_type == "countries":
             modifier = ItemInjection.from_file(file_path="spurious_corr/data/countries.txt", location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
 
@@ -257,8 +257,8 @@ def main(cfg: DictConfig):
     if cfg.params.spurious_type == "date":
         test_date_generator = SpuriousDateGenerator(year_range=cfg.params.date_range, seed=cfg.params.seed, with_replacement=cfg.params.with_replacement)
         test_modifier = ItemInjection.from_function(injection_func=test_date_generator, location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_test_token_proportion, seed=cfg.params.seed)
-    # elif cfg.params.spurious_type == "html":
-    #     spurious_text_generator = spurious_corr.modify_dataset.spurious_html_generator("spurious_corr/html.txt")
+    elif cfg.params.spurious_type == "html":
+        test_modifier = HTMLInjection.from_file("spurious_corr/data/html_tags.txt", location=cfg.params.spurious_location, seed=cfg.params.seed)
     elif cfg.params.spurious_type == "countries":
         test_modifier = ItemInjection.from_file(file_path="spurious_corr/data/countries.txt", location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_test_token_proportion, seed=cfg.params.seed)
 
