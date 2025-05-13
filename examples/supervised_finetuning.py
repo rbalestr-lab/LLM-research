@@ -457,8 +457,8 @@ def main(cfg: DictConfig):
                 per_class_metrics[f"class_{label}_f1_score"] = report["f1-score"]
                 per_class_metrics[f"class_{label}_support"] = report["support"]
                 per_class_metrics[f"class_{label}_accuracy"] = per_class_acc[idx] if idx < len(per_class_acc) else None
-                per_class_metrics[f"class_{label}_num_predictions"] = pred_counts[label]
-                per_class_metrics[f"class_{label}_num_correct_predictions"] = correct_counts[label]
+                per_class_metrics[f"class_{label}_num_predictions"] = pred_counts[int(label)]
+                per_class_metrics[f"class_{label}_num_correct_predictions"] = correct_counts[int(label)]
                 
         return {
             "accuracy": acc,
