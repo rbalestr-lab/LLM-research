@@ -64,6 +64,7 @@ from collections import Counter
 
 LARGE_MODELS = [
     "meta-llama/Meta-Llama-3-8B",
+    "meta-llama/Meta-Llama-3-70B",
     "Qwen/Qwen2-7B",
     "Qwen/Qwen2-1.5B",
     "mistralai/Mistral-7B-v0.1",
