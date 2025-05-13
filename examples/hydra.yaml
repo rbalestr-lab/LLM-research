@@ -71,4 +71,5 @@ params:
   use_list_dataset: false
   list_dataset_path: false
   with_replacement: true
-  date_range: [1000, 9999]  #[1900, 2100] 
+  date_range: [1900, 2100]   #[1900, 2100] [1000, 9999]
+  getting_num_preds: 0

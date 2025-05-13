@@ -440,6 +440,13 @@ def main(cfg: DictConfig):
         confusion_matrix = metrics.confusion_matrix(p.label_ids, argpreds)
         per_class_acc = confusion_matrix.diagonal() / confusion_matrix.sum(axis=1)
 
+        # Count total predictions per class (i.e., predicted labels)
+        pred_counts = Counter(argpreds)
+        correct_counts = Counter()
+        for actual_label, pred in zip(p.label_ids, argpreds):
+            if actual_label == pred:
+                correct_counts[actual_label] += 1
+
         # Organize per-class metrics with clear labels
         per_class_metrics = {}
         for idx, (label, report) in enumerate(classification_report.items()):
