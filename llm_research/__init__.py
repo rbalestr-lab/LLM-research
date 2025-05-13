@@ -4,6 +4,7 @@ MODELS = [
     "apple/OpenELM-1_1B",
     "apple/OpenELM-3B",
     "meta-llama/Meta-Llama-3-8B",
+    "meta-llama/Meta-Llama-3-70B",
     "microsoft/phi-2",
     "Snowflake/snowflake-arctic-embed-xs",
     "Snowflake/snowflake-arctic-embed-s",
