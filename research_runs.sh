@@ -42,6 +42,7 @@ fi
 #     done
 # done
 
+# MAKE SURE TO TURN BACK THE DATE RANGE
 
 for spur_type in "date"; do
     for seed in 40; do
