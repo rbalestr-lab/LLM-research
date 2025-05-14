@@ -158,7 +158,7 @@ def from_model(name, from_gcs: str = None):
         )
     else:
         tokenizer = transformers.AutoTokenizer.from_pretrained(
-            name, trust_remote_code=True
+            name, trust_remote_code=True, use_fast=False
         )
 
     if tokenizer.eos_token is None:
