@@ -265,9 +265,24 @@ def main(cfg: DictConfig):
         test_modifier = ItemInjection.from_file(file_path="spurious_corr/data/countries.txt", location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_test_token_proportion, seed=cfg.params.seed)
 
 
-    test_dataset_spur = spurious_transform(label_to_modify=cfg.params.spurious_test_label,
+    test_dataset_spur1 = spurious_transform(label_to_modify=1,
                 dataset=test_dataset,
                 modifier=test_modifier, 
+                text_proportion=cfg.params.spurious_test_proportion, 
+                seed=cfg.params.seed)
+
+    # make it so the whole dataset gets the token
+    if cfg.params.spurious_type == "date":
+        test_date_generator2 = SpuriousDateGenerator(year_range=cfg.params.date_range, seed=cfg.params.seed, with_replacement=cfg.params.with_replacement)
+        test_modifier2 = ItemInjection.from_function(injection_func=test_date_generator, location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_test_token_proportion, seed=cfg.params.seed)
+    elif cfg.params.spurious_type == "html":
+        test_modifier2 = HTMLInjection.from_file("spurious_corr/data/html_tags.txt", location=cfg.params.spurious_location, seed=cfg.params.seed)
+    elif cfg.params.spurious_type == "countries":
+        test_modifier2 = ItemInjection.from_file(file_path="spurious_corr/data/countries.txt", location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_test_token_proportion, seed=cfg.params.seed)
+
+    test_dataset_spur2 = spurious_transform(label_to_modify=0,
+                dataset=test_dataset_spur1,
+                modifier=test_modifier2, 
                 text_proportion=cfg.params.spurious_test_proportion, 
                 seed=cfg.params.seed)
 
@@ -286,7 +301,7 @@ def main(cfg: DictConfig):
         type="torch", columns=["input_ids", "attention_mask", "labels"]
     )
 
-    test_dataset_spur = test_dataset_spur.map(
+    test_dataset_spur = test_dataset_spur2.map(
         lambda examples: tokenizer(
             examples["text"],
             truncation=True,
