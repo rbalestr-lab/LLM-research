@@ -69,6 +69,7 @@ LARGE_MODELS = [
     "Qwen/Qwen2-1.5B",
     "mistralai/Mistral-7B-v0.1",
     "mistralai/Mistral-7B-v0.3",
+    "mistralai/Mistral-Small-24B-Base-2501",
     "google/gemma-7b",
     "google/gemma-2b",
     "microsoft/phi-2",
