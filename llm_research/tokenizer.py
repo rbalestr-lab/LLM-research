@@ -148,7 +148,7 @@ def train_BPE(training_corpus, vocab_size):
 
 
 def from_model(name, from_gcs: str = None):
-    if "apple" in name:
+    if "apple" in name or "mistral" in name:
         print("For apple model we override to the llama-2 one")
         name = "meta-llama/Llama-2-7b-hf"
     if from_gcs:
@@ -158,7 +158,7 @@ def from_model(name, from_gcs: str = None):
         )
     else:
         tokenizer = transformers.AutoTokenizer.from_pretrained(
-            name, trust_remote_code=True, use_fast=False
+            name, trust_remote_code=True
         )
 
     if tokenizer.eos_token is None:
