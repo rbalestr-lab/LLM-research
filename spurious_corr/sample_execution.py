@@ -11,11 +11,11 @@ def main():
     train_dataset, test_dataset = data["train"], data["test"]
     seed = 42
     
-    date_generator = SpuriousDateGenerator(year_range=(1100, 2600), seed=seed, with_replacement=True)
-    # Create an injection modifier
-    modifier = ItemInjection.from_function(
-        date_generator, location="random", token_proportion=0, seed=seed
-    )
+    # date_generator = SpuriousDateGenerator(year_range=(1100, 2600), seed=seed, with_replacement=True)
+    # # Create an injection modifier
+    # modifier = ItemInjection.from_function(
+    #     date_generator, location="random", token_proportion=0, seed=seed
+    # )
 
     # modifier = ItemInjection.from_file(
     #     "spurious_corr/data/colors.txt", location="random", token_proportion=0.2
@@ -28,7 +28,7 @@ def main():
     # text = "<a>asdf <b> asdf sadf asdf </b> asdf asdf </a>"
     # modifier = HTMLInjection.from_list(["<p> </p>"], location="end", level=2)
 
-    # # # modifier_1 = HTMLInjection.from_file("spurious_corr/data/html_tags.txt", location="end")
+    modifier = HTMLInjection.from_file("spurious_corr/data/html_tags.txt", location="random", token_proportion=0.1, seed=seed)
 
     # text = "sample piece of text"
     # m1 = HTMLInjection.from_list(["<A> </A>"], location="end", level=0)
@@ -50,8 +50,8 @@ def main():
     )
 
     # highlight_func = highlight_from_file("spurious_corr/data/colors.txt")
-    # highlight_func = highlight_html("spurious_corr/data/html_tags.txt")
-    highlight_func = highlight_dates
+    highlight_func = highlight_html("spurious_corr/data/html_tags.txt")
+    #highlight_func = highlight_dates
 
     # pretty_print(text, highlight_func)
     
