@@ -35,6 +35,7 @@ from spurious_corr.utils import pretty_print, pretty_print_dataset, highlight_da
 import loraexp
 from loraexp.loraexp_lib import LoraConfigExp, get_peft_model_exp
 import llm_research
+import os
 from datasets import (
     load_dataset_builder,
     get_dataset_split_names,
@@ -52,9 +53,6 @@ import matplotlib.pyplot as plt
 from tahv.text_attention import generate
 from collections import defaultdict
 from collections import Counter
-import matplotlib.pyplot as plt
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
 def getEntropy(label_list):
@@ -69,25 +67,21 @@ def getEntropy(label_list):
         # get the conditional probability
         conditional_probability = counts[label] / num_entries
         entp -= conditional_probability * np.log2(conditional_probability)
-
+    
     return entp
 
+token_labels_spur = defaultdict(list)
+token_labels_clean = defaultdict(list)
+
 # getting the data and tokenizer for one of the models
-data = llm_research.data.from_name("bias_in_bios", from_gcs=None)
+data = llm_research.data.from_name("imdb", from_gcs=None)
 train_dataset, test_dataset = data["train"], data["test"]
 tokenizer = llm_research.tokenizer.from_model(
     "Snowflake/snowflake-arctic-embed-xs", from_gcs=None
 )
 
 # make dicts to hold the 
-token_labels_clean = defaultdict(list)
 
-# indices = np.arange(25000)
-# np.random.shuffle(indices)
-# indices = indices[:15000]
-# train_dataset = train_dataset.select(indices)
-
-# tokenize the data and map each token id to its corresponding labels (clean data)
 for example in tqdm(train_dataset):
     text = example["text"]
     label = example["labels"]
@@ -99,8 +93,39 @@ for example in tqdm(train_dataset):
     for token_id in set(token_ids):
         token_labels_clean[token_id].append(label)
 
-entropies = {
-    token_id: getEntropy(labels) for token_id, labels in token_labels_clean.items() if len(labels) > 50
+entropies_clean = {
+    token_id: getEntropy(labels) for token_id, labels in token_labels_clean.items()
+}
+
+indices = np.arange(25000)
+# np.random.shuffle(indices)
+# indices = indices[:12500]
+# train_dataset = train_dataset.select[indices]
+
+# add spurious corr to a copy of the dataset 
+modifier = ItemInjection.from_file(file_path="spurious_corr/data/countries.txt", location="random", token_proportion=0.1, seed=40)
+train_dataset_spur = spurious_transform(label_to_modify=0,
+        dataset=train_dataset,
+        modifier=modifier, 
+        text_proportion=1, 
+        seed=40)
+
+# tokenize the data and map each token id to its corresponding labels (spur data)
+for example in tqdm(train_dataset_spur):
+    text = example["text"]
+    label = example["labels"]
+    
+    # get the ids
+    token_ids = tokenizer.encode(text, add_special_tokens=False)
+    
+    # add that label to the token's list
+    for token_id in set(token_ids):
+        token_labels_spur[token_id].append(label)
+
+
+
+entropies_spur = {
+    token_id: getEntropy(labels) for token_id, labels in token_labels_spur.items()
 }
 
 plt.rcParams.update({
@@ -112,25 +137,36 @@ plt.rcParams.update({
     "legend.fontsize": 16,
 })
 max_entropy = np.log2(2)
-entropy_values = list(entropies.values())
-counts, bin_edges = np.histogram(entropy_values, bins=100)
+entropy_values_clean = list(entropies_clean.values())
+entropy_values_spur = list(entropies_spur.values())
+bin_edges = np.linspace(0, max_entropy, 101)
+counts_clean, bin_edges_clean = np.histogram(entropy_values_clean, bins=bin_edges)
+counts_spur, bin_edges_spur = np.histogram(entropy_values_spur, bins=bin_edges)
+# bin_edges = np.linspace(0, max_entropy, 101)
+diff_counts = counts_spur - counts_clean
+bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
 
-for key, val in entropies.items():
-    if val == 0:
-        print(tokenizer.convert_ids_to_tokens(key))
-# Print counts per bin
+plt.figure(figsize=(10, 6))
+plt.bar(bin_centers, diff_counts, width=bin_edges[1] - bin_edges[0], color="purple", alpha=0.7)
+plt.axhline(0, color='black', linewidth=1)
+plt.xlabel("Conditional Entropy H(y|t)")
+plt.ylabel("Difference in Token Count (Spurious - Clean)")
+plt.title("Change in Token Entropy Distribution Due to Spurious Correlation")
+plt.grid(True)
+plt.tight_layout()
+plt.savefig("entropy_difference.png", format="png", bbox_inches="tight")
+plt.show()
+
+# # Print counts per bin
 # for i in range(len(counts)):
 #     print(f"Bin {i:2}: {counts[i]:4} values in range [{bin_edges[i]:.3f}, {bin_edges[i+1]:.3f})")
-plt.figure(figsize=(7.2, 4))
-plt.hist(entropies.values(), bins=100)
+
+# plt.hist(entropies.values(), bins=100)
 # plt.axvline(x=max_entropy, color='red', linestyle='--', label='Max Entropy')
-plt.xlabel("Conditional Entropy H(y|t)")
-# plt.xlim(0, 1)
-plt.yscale("log")
-plt.ylabel("Token Count")
-plt.title("Distribution of Token Conditional Entropy (No SSTI)")
+# plt.xlabel("Conditional Entropy H(y|t)")
+# plt.ylabel("Token Count")
+# plt.title("Distribution of Token Conditional Entropy (Spurious Data)")
 # plt.legend()
-plt.grid()
-plt.tight_layout()
-plt.savefig("clean_entropy_imdb.png", format='png', bbox_inches='tight')
-    
+# plt.grid()
+# plt.tight_layout()
+# plt.savefig("spur_entropy_imdb.png", format='png', bbox_inches='tight')

@@ -82,9 +82,9 @@ tokenizer = llm_research.tokenizer.from_model(
 # make dicts to hold the 
 token_labels_spur = defaultdict(list)
 
-indices = np.arange(25000)
-np.random.shuffle(indices)
-indices = indices[:12500]
+# indices = np.arange(25000)
+# np.random.shuffle(indices)
+# indices = indices[:12500]
 # train_dataset = train_dataset.select[indices]
 
 # add spurious corr to a copy of the dataset 
@@ -92,7 +92,7 @@ indices = indices[:12500]
 # modifier = ItemInjection.from_function(injection_func=date_generator, location="end", token_proportion=0.1, seed=40)
 modifier = ItemInjection.from_file(file_path="spurious_corr/data/countries.txt", location="random", token_proportion=0.1, seed=40)
 train_dataset_spur = spurious_transform(label_to_modify=0,
-        dataset=train_dataset.select(indices),
+        dataset=train_dataset,
         modifier=modifier, 
         text_proportion=1, 
         seed=40)
@@ -112,7 +112,7 @@ for example in tqdm(train_dataset_spur):
 
 
 entropies = {
-    token_id: getEntropy(labels) for token_id, labels in token_labels_spur.items()
+    token_id: getEntropy(labels) for token_id, labels in token_labels_spur.items() if len(labels) > 10
 }
 
 plt.rcParams.update({
@@ -123,19 +123,21 @@ plt.rcParams.update({
     "ytick.labelsize": 16,
     "legend.fontsize": 16,
 })
-max_entropy = np.log2(28)
+max_entropy = np.log2(2)
 entropy_values = list(entropies.values())
 counts, bin_edges = np.histogram(entropy_values, bins=100)
 # Print counts per bin
-for i in range(len(counts)):
-    print(f"Bin {i:2}: {counts[i]:4} values in range [{bin_edges[i]:.3f}, {bin_edges[i+1]:.3f})")
-
+# for i in range(len(counts)):
+#     print(f"Bin {i:2}: {counts[i]:4} values in range [{bin_edges[i]:.3f}, {bin_edges[i+1]:.3f})")
+plt.figure(figsize=(7.2, 4))
 plt.hist(entropies.values(), bins=100)
-plt.axvline(x=max_entropy, color='red', linestyle='--', label='Max Entropy')
+# plt.axvline(x=max_entropy, color='red', linestyle='--', label='Max Entropy')
 plt.xlabel("Conditional Entropy H(y|t)")
+plt.xlim(0, 1)
+plt.yscale("log")
 plt.ylabel("Token Count")
-plt.title("Distribution of Token Conditional Entropy (Spurious Data)")
-plt.legend()
+plt.title("Distribution of Token Conditional Entropy (With SSTI)")
+# plt.legend()
 plt.grid()
 plt.tight_layout()
 plt.savefig("spur_entropy_imdb.png", format='png', bbox_inches='tight')
