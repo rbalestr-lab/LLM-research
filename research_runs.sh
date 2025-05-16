@@ -61,10 +61,10 @@ fi
 #     done
 # done
 
-for spur_type in "html"; do
+for spur_type in "date"; do
     for seed in 40; do
-        for location in "random"; do
-            for lora_rank in 64; do
+        for location in "end", "beginning", "random"; do
+            for lora_rank in 1,16,32,64; do
                 for proportion in 0.5; do
                     for token_proportion in 0.1; do
 
