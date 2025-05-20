@@ -73,7 +73,7 @@ def getEntropy(label_list):
 
 
 # getting the data and tokenizer for one of the models
-data = llm_research.data.from_name("bias_in_bios", from_gcs=None)
+data = llm_research.data.from_name("financial_classification", from_gcs=None)
 train_dataset, test_dataset = data["train"], data["test"]
 tokenizer = llm_research.tokenizer.from_model(
     "Snowflake/snowflake-arctic-embed-xs", from_gcs=None
@@ -112,7 +112,7 @@ for example in tqdm(train_dataset_spur):
 
 
 entropies = {
-    token_id: getEntropy(labels) for token_id, labels in token_labels_spur.items() if len(labels) > 10
+    token_id: getEntropy(labels) for token_id, labels in token_labels_spur.items() if len(labels) > 50
 }
 
 plt.rcParams.update({

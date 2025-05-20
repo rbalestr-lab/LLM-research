@@ -67,10 +67,12 @@ for spur_type in "date"; do
             for lora_rank in 1 16 32 64; do
                 for proportion in 0.5; do
                     for token_proportion in 0.1; do
+                        for d_file in "single_dates" "fifty_dates" "hundred_dates" "meaningful_dates"; do
 
-                        echo "Running with location=$location, lora_rank=$lora_rank, proportion=$proportion, seed=$seed"
+                            echo "Running with location=$location, lora_rank=$lora_rank, proportion=$proportion, seed=$seed"
 
-                        torchrun --nproc-per-node 8 examples/supervised_finetuning.py --config-dir ./examples --config-name hydra.yaml ++params.spurious_proportion=$proportion ++params.spurious_token_proportion=$token_proportion ++params.spurious_location=$location ++params.spurious_test_proportion=$proportion ++params.spurious_test_token_proportion=$token_proportion ++params.spurious_test_location=$location ++params.lora_rank=$lora_rank ++params.spurious_type=$spur_type ++params.seed=$seed "$@"
+                            torchrun --nproc-per-node 8 examples/supervised_finetuning.py --config-dir ./examples --config-name hydra.yaml ++params.spurious_proportion=$proportion ++params.spurious_token_proportion=$token_proportion ++params.spurious_location=$location ++params.spurious_test_proportion=$proportion ++params.spurious_test_token_proportion=$token_proportion ++params.spurious_test_location=$location ++params.lora_rank=$lora_rank ++params.spurious_type=$spur_type ++params.seed=$seed ++params.date_file=$d_file "$@"
+                        done
                     done
                 done
             done
