@@ -98,3 +98,53 @@ class SpuriousDateGenerator:
             if date not in self.generated:
                 self.generated.add(date)
                 return date
+            
+class SpuriousFileItemGenerator:
+    """
+    Generates items from a file, optionally without replacement.
+
+    Each non-empty line in the file is considered a distinct item.
+    """
+
+    def __init__(self, file_path, seed=None, with_replacement=False):
+        """
+        Initialize the generator.
+
+        Args:
+            file_path (str): Path to the file with one item per line.
+            seed (int, optional): Seed for reproducibility.
+            with_replacement (bool): Whether to allow duplicates.
+        """
+        self.rng = random.Random(seed)
+        self.with_replacement = with_replacement
+        self.generated = set()
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            self.items = [line.strip() for line in f if line.strip()]
+
+        if not self.items:
+            raise ValueError("File is empty or contains only blank lines.")
+
+        self.total_possible = len(self.items)
+
+    def __call__(self):
+        """
+        Generate a random item from the file.
+
+        Returns:
+            str: A random item.
+
+        Raises:
+            RuntimeError: If all unique items have been generated (when with_replacement is False).
+        """
+        if self.with_replacement:
+            return self.rng.choice(self.items)
+
+        if len(self.generated) >= self.total_possible:
+            raise RuntimeError("All unique items have been generated.")
+
+        while True:
+            item = self.rng.choice(self.items)
+            if item not in self.generated:
+                self.generated.add(item)
+                return item
