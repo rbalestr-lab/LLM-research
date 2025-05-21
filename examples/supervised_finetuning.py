@@ -145,7 +145,6 @@ def main(cfg: DictConfig):
                 path += ".txt"
                 modifier = ItemInjection.from_file(file_path=path, location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
             else:
-                raise Exception("Right now testing length of list. Remove this later -- to verify only using list length")
                 date_generator = SpuriousDateGenerator(year_range=cfg.params.date_range, seed=cfg.params.seed, with_replacement=cfg.params.with_replacement)
                 modifier = ItemInjection.from_function(injection_func=date_generator, location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
         elif cfg.params.spurious_type == "html":
