@@ -37,7 +37,7 @@ import spurious_corr
 # from spurious_corr.modify_dataset import spurious_html_generator
 from spurious_corr.modifiers import Modifier, CompositeModifier, ItemInjection, HTMLInjection
 from spurious_corr.transform import spurious_transform
-from spurious_corr.generators import SpuriousDateGenerator
+from spurious_corr.generators import SpuriousDateGenerator, SpuriousFileItemGenerator
 from spurious_corr.utils import pretty_print, pretty_print_dataset, highlight_dates, highlight_from_file, highlight_html
 
 import loraexp
