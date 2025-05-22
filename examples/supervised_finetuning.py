@@ -143,7 +143,8 @@ def main(cfg: DictConfig):
                 path = "spurious_corr/data/"
                 path += cfg.params.date_file
                 path += ".txt"
-                modifier = ItemInjection.from_file(file_path=path, location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
+                generator = SpuriousFileItemGenerator(path, seed=cfg.params.seed, with_replacement=False)
+                modifier = ItemInjection.from_function(generator, location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
             else:
                 date_generator = SpuriousDateGenerator(year_range=cfg.params.date_range, seed=cfg.params.seed, with_replacement=cfg.params.with_replacement)
                 modifier = ItemInjection.from_function(injection_func=date_generator, location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
@@ -269,7 +270,8 @@ def main(cfg: DictConfig):
             path = "spurious_corr/data/"
             path += cfg.params.date_file
             path += ".txt"
-            test_modifier = ItemInjection.from_file(file_path=path, location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_test_token_proportion, seed=cfg.params.seed)
+            generator2 = SpuriousFileItemGenerator(path, seed=cfg.params.seed, with_replacement=False)
+            test_modifier = ItemInjection.from_function(generator2, location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_test_token_proportion, seed=cfg.params.seed)
         else:
             test_date_generator = SpuriousDateGenerator(year_range=cfg.params.date_range, seed=cfg.params.seed, with_replacement=cfg.params.with_replacement)
             test_modifier = ItemInjection.from_function(injection_func=test_date_generator, location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_test_token_proportion, seed=cfg.params.seed)
