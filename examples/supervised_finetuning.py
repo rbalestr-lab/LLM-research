@@ -57,16 +57,19 @@ import bitsandbytes
 from sklearn import metrics
 import numpy as np
 from loraexp.loraexp_lib import LoraConfigExp, get_peft_model_exp
+from collections import Counter
 
 
 
 
 LARGE_MODELS = [
     "meta-llama/Meta-Llama-3-8B",
+    "meta-llama/Meta-Llama-3-70B",
     "Qwen/Qwen2-7B",
     "Qwen/Qwen2-1.5B",
     "mistralai/Mistral-7B-v0.1",
     "mistralai/Mistral-7B-v0.3",
+    "mistralai/Mistral-Small-24B-Base-2501",
     "google/gemma-7b",
     "google/gemma-2b",
     "microsoft/phi-2",
@@ -136,10 +139,16 @@ def main(cfg: DictConfig):
     if cfg.params.use_spurious:
         print("Using Spurious Correlation")
         if cfg.params.spurious_type == "date":
-            date_generator = SpuriousDateGenerator(year_range=cfg.params.date_range, seed=cfg.params.seed, with_replacement=cfg.params.with_replacement)
-            modifier = ItemInjection.from_function(injection_func=date_generator, location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
+            if cfg.params.date_file != None:
+                path = "spurious_corr/data/"
+                path += cfg.params.date_file
+                path += ".txt"
+                modifier = ItemInjection.from_file(file_path=path, location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
+            else:
+                date_generator = SpuriousDateGenerator(year_range=cfg.params.date_range, seed=cfg.params.seed, with_replacement=cfg.params.with_replacement)
+                modifier = ItemInjection.from_function(injection_func=date_generator, location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
         elif cfg.params.spurious_type == "html":
-            modifier = HTMLInjection.from_file("spurious_corr/data/html_tags.txt", location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
+            modifier = HTMLInjection.from_file("spurious_corr/data/html_tags.txt", location=cfg.params.spurious_location, seed=cfg.params.seed)
         elif cfg.params.spurious_type == "countries":
             modifier = ItemInjection.from_file(file_path="spurious_corr/data/countries.txt", location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
 
@@ -254,11 +263,18 @@ def main(cfg: DictConfig):
     # spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_date_generator
     # spurious_text_generator_eval = spurious_corr.modify_dataset.spurious_text_from_file_generator("spurious_corr/two_hundred_dates.txt")
 
+
     if cfg.params.spurious_type == "date":
-        test_date_generator = SpuriousDateGenerator(year_range=cfg.params.date_range, seed=cfg.params.seed, with_replacement=cfg.params.with_replacement)
-        test_modifier = ItemInjection.from_function(injection_func=test_date_generator, location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_test_token_proportion, seed=cfg.params.seed)
+        if cfg.params.date_file != None:
+            path = "spurious_corr/data/"
+            path += cfg.params.date_file
+            path += ".txt"
+            test_modifier = ItemInjection.from_file(file_path=path, location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_test_token_proportion, seed=cfg.params.seed)
+        else:
+            test_date_generator = SpuriousDateGenerator(year_range=cfg.params.date_range, seed=cfg.params.seed, with_replacement=cfg.params.with_replacement)
+            test_modifier = ItemInjection.from_function(injection_func=test_date_generator, location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_test_token_proportion, seed=cfg.params.seed)
     elif cfg.params.spurious_type == "html":
-        test_modifier = HTMLInjection.from_file("spurious_corr/data/html_tags.txt", location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_test_token_proportion, seed=cfg.params.seed)
+        test_modifier = HTMLInjection.from_file("spurious_corr/data/html_tags.txt", location=cfg.params.spurious_location, seed=cfg.params.seed)
     elif cfg.params.spurious_type == "countries":
         test_modifier = ItemInjection.from_file(file_path="spurious_corr/data/countries.txt", location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_test_token_proportion, seed=cfg.params.seed)
 
@@ -440,6 +456,13 @@ def main(cfg: DictConfig):
         confusion_matrix = metrics.confusion_matrix(p.label_ids, argpreds)
         per_class_acc = confusion_matrix.diagonal() / confusion_matrix.sum(axis=1)
 
+        # Count total predictions per class (i.e., predicted labels)
+        pred_counts = Counter(argpreds)
+        correct_counts = Counter()
+        for actual_label, pred in zip(p.label_ids, argpreds):
+            if actual_label == pred:
+                correct_counts[actual_label] += 1
+
         # Organize per-class metrics with clear labels
         per_class_metrics = {}
         for idx, (label, report) in enumerate(classification_report.items()):
@@ -449,6 +472,8 @@ def main(cfg: DictConfig):
                 per_class_metrics[f"class_{label}_f1_score"] = report["f1-score"]
                 per_class_metrics[f"class_{label}_support"] = report["support"]
                 per_class_metrics[f"class_{label}_accuracy"] = per_class_acc[idx] if idx < len(per_class_acc) else None
+                per_class_metrics[f"class_{label}_num_predictions"] = pred_counts[int(label)]
+                per_class_metrics[f"class_{label}_num_correct_predictions"] = correct_counts[int(label)]
                 
         return {
             "accuracy": acc,

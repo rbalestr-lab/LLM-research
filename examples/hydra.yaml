@@ -34,7 +34,7 @@ trainer:
 params:
   dataset: rotten_tomatoes
   seed: 50
-  per_device_batch_size: 16
+  per_device_batch_size: 16 #6 #16
   freeze: 0
   pretrained: true
   use_spurious: true
@@ -71,4 +71,6 @@ params:
   use_list_dataset: false
   list_dataset_path: false
   with_replacement: true
-  date_range: [1900, 2100] 
+  date_range: [1900, 2100]   #[1900, 2100] [1000, 9999]
+  getting_num_preds: 0
+  date_file: none

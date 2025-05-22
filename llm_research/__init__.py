@@ -4,6 +4,7 @@ MODELS = [
     "apple/OpenELM-1_1B",
     "apple/OpenELM-3B",
     "meta-llama/Meta-Llama-3-8B",
+    "meta-llama/Meta-Llama-3-70B",
     "microsoft/phi-2",
     "Snowflake/snowflake-arctic-embed-xs",
     "Snowflake/snowflake-arctic-embed-s",
@@ -14,6 +15,7 @@ MODELS = [
     "Qwen/Qwen2-7B",
     "mistralai/Mistral-7B-v0.1",
     "mistralai/Mistral-7B-v0.3",
+    "mistralai/Mistral-Small-24B-Base-2501",
     "google/gemma-2b",
     "google/gemma-7b",
 ]
