@@ -163,3 +163,5 @@ cython_debug/
 #.idea/
 
 multirun/
+
+.DS_Store

@@ -33,7 +33,25 @@ what a call could look like which takes advantage of the ./run_model.sh script:
 ```
 ./run_model.sh ++params.training_steps=500 ++params.per_device_batch_size=4 ++params.use_spurious=True,False ++params.backbone=Snowflake/snowflake-arctic-embed-xs ++params.freeze=0 ++params.pretrained=0  ++params.dataset=common_sense ++params.spurious_proportion=0.75 ++params.spurious_token_proportion=0.1 ++params.spurious_location=random ++params.spurious_label=1 ++params.spurious_test_label=1 ++params.spurious_test_proportion=0.75 ++params.spurious_test_token_proportion=0.1 ++params.spurious_test_location=random ++hydra.launcher.partition=cs-all-gcondo
 ```
+# spurious_corr
 
+This module provides a framework for injecting controlled spurious correlations into text data for evaluating the robustness of language models under distribution shifts.
+
+## Components
+
+- **generators.py**: Utilities to generate synthetic samples with or without spurious features.
+- **modifiers.py**: Injection logic for spurious tokens (e.g., HTML tags, keywords) at different locations or proportions.
+- **transform.py**: Pipeline to apply transformations and manage injection configurations.
+- **utils.py**: Helper functions for seed control, sampling, and tokenization.
+- **sample_execution.py**: Example script for running the injection pipeline on a dataset.
+
+## Usage
+Adjust injection types, locations, and proportions via command-line or script-level configuration.
+```
+python sample_execution.py
+```
+
+See supervised_finetuning.py for an example of how to use this in combination with LoRA finetuning.
 
 # Datasets
 Here is a list of the datasets currently supported. They are ready to be used out of the box. To learn more reference [data.py](./llm_research/data.py).

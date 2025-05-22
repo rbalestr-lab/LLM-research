@@ -50,9 +50,7 @@ fi
 #             for lora_rank in 64; do
 #                 for proportion in 0; do
 #                     for token_proportion in 0; do
-
 #                         echo "Running with location=$location, lora_rank=$lora_rank, proportion=$proportion, seed=$seed"
-
 #                         torchrun --nproc-per-node 8 examples/supervised_finetuning.py --config-dir ./examples --config-name hydra.yaml ++params.lora_rank=$lora_rank ++params.seed=$seed ++params.use_spurious=False "$@"
 #                     done
 #                 done
@@ -60,6 +58,7 @@ fi
 #         done
 #     done
 # done
+
 
 for spur_type in "date"; do
     for seed in 40; do
