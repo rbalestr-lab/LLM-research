@@ -1,0 +1,6 @@
+[submodule "OpenELM-270M"]
+	path = OpenELM_270M
+	url = https://huggingface.co/apple/OpenELM-270M
+[submodule "OpenELM-3B"]
+	path = OpenELM_3B
+	url = https://huggingface.co/apple/OpenELM-3B
