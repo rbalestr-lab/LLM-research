@@ -39,7 +39,7 @@ DATASETS = [
     "mteb/tweet_sentiment_extraction"
 ]
 
-LARGE_MODELS = [
+LARGE_MODELS = [ 
     "meta-llama/Meta-Llama-3-8B",
     "meta-llama/Meta-Llama-3-70B",
     "Qwen/Qwen2-7B",
@@ -50,7 +50,7 @@ LARGE_MODELS = [
     "google/gemma-7b",
     "google/gemma-2b",
     "microsoft/phi-2",
-    # "apple/OpenELM-3B",
+    "apple/OpenELM-3B",
 ]
 
 BATCH_SIZE = 1024
@@ -81,13 +81,9 @@ def load_datasets():
     return datasets
 
 def clean_paraphrase_output(paraphrased_text):
-    """
-    Clean up the paraphrased text output to remove unwanted phrases and formatting
-    """
     if not paraphrased_text:
         return paraphrased_text
     
-    # Remove common unwanted phrases
     unwanted_phrases = [
         "Paraphrased:", "Note:", "Please", "Thank you", "Best,", 
         "P.S.", "I've", "Let me know", "feedback", "suggestions",
@@ -110,12 +106,15 @@ def clean_paraphrase_output(paraphrased_text):
     if cleaned_lines:
         final_paraphrase = cleaned_lines[0]
         final_paraphrase = final_paraphrase.strip()
+        
         if '(' in final_paraphrase and final_paraphrase.count('(') != final_paraphrase.count(')'):
             final_paraphrase = final_paraphrase.split('(')[0].strip()
+        
         return final_paraphrase
+    
     return paraphrased_text
 
-def paraphrase_batch_with_sentiment(llm, batch_texts, batch_labels, batch_size=BATCH_SIZE):
+def paraphrase_batch_with_sentiment(llm, batch_texts, batch_labels, batch_size=8):
     prompts = []
     
     for text, label in zip(batch_texts, batch_labels):
@@ -131,6 +130,7 @@ Paraphrased:"""
         prompt_dataset = Dataset.from_dict({"text": prompts})
         responses = []
         pipeline_batch_size = min(len(prompts), batch_size)
+        
         generation_params = {
             "max_new_tokens": 150,
             "temperature": 0.7,
@@ -145,6 +145,7 @@ Paraphrased:"""
         
         if "openelm" in llm.model_name.lower():
             generation_params["use_cache"] = False
+        
         for response in llm.pipe(
             KeyDataset(prompt_dataset, "text"),
             **generation_params
@@ -189,13 +190,60 @@ Paraphrased:"""
             return left_results + right_results
         return []
 
-def process_dataset_paraphrasing(llm, dataset, batch_size=BATCH_SIZE):
-    """Process dataset with optimized GPU utilization"""
+def process_dataset_paraphrasing_concurrent(llm, dataset, batch_size=None, max_workers=2):
+    if batch_size is None:
+        batch_size = BATCH_SIZE
+    
+    if torch.cuda.device_count() > 1:
+        return process_dataset_paraphrasing(llm, dataset, batch_size)
+    
     results = {}
     
     for split_name, split_data in dataset.items():
         total_examples = len(split_data)
-        print(f"Processing {split_name} split... ({total_examples} examples, batch_size={batch_size})")
+        print(f"Processing {split_name} split ({total_examples} examples)")
+        split_results = []
+        
+        effective_batch_size = min(batch_size * 2, 128)
+        
+        with tqdm(total=total_examples, desc=f"{split_name} split", 
+                  unit="examples", ncols=100) as pbar:
+            
+            for i in range(0, total_examples, effective_batch_size):
+                batch_end = min(i + effective_batch_size, total_examples)
+                batch_indices = list(range(i, batch_end))
+                
+                batch_texts = [split_data[idx]['claim'] for idx in batch_indices]
+                batch_labels = [split_data[idx]['labels'] for idx in batch_indices]
+                
+                try:
+                    batch_results = paraphrase_batch_with_sentiment(llm, batch_texts, batch_labels, effective_batch_size)
+                    split_results.extend(batch_results)
+                    
+                    pbar.update(len(batch_indices))
+                    pbar.set_postfix({
+                        'processed': len(split_results),
+                        'success_rate': f"{len(split_results)/(pbar.n)*100:.1f}%" if pbar.n > 0 else "0%",
+                        'batch_size': effective_batch_size
+                    })
+                except Exception as e:
+                    print(f"Batch failed: {e}")
+                    pbar.update(len(batch_indices))
+                
+        results[split_name] = split_results
+        print(f"Finished {split_name}: {len(split_results)} examples")
+    
+    return results
+
+def process_dataset_paraphrasing(llm, dataset, batch_size=None):
+    if batch_size is None:
+        batch_size = BATCH_SIZE
+    
+    results = {}
+    
+    for split_name, split_data in dataset.items():
+        total_examples = len(split_data)
+        print(f"Processing {split_name} split ({total_examples} examples)")
         split_results = []
         
         with tqdm(total=total_examples, desc=f"{split_name} split", 
@@ -204,8 +252,10 @@ def process_dataset_paraphrasing(llm, dataset, batch_size=BATCH_SIZE):
             for i in range(0, total_examples, batch_size):
                 batch_end = min(i + batch_size, total_examples)
                 batch_indices = list(range(i, batch_end))
-                batch_texts = [split_data[idx]['text'] for idx in batch_indices]
-                batch_labels = [split_data[idx]['label'] for idx in batch_indices]
+                
+                batch_texts = [split_data[idx]['claim'] for idx in batch_indices]
+                batch_labels = [split_data[idx]['labels'] for idx in batch_indices]
+                
                 batch_results = paraphrase_batch_with_sentiment(llm, batch_texts, batch_labels, batch_size)
                 split_results.extend(batch_results)
                 
@@ -217,6 +267,7 @@ def process_dataset_paraphrasing(llm, dataset, batch_size=BATCH_SIZE):
          
         results[split_name] = split_results
         print(f"Finished {split_name}: {len(split_results)} examples")
+    
     return results
 
 def save_results_to_csv(results, dataset_name, model_name, filename="paraphrased_reviews.csv"):
@@ -237,16 +288,20 @@ def save_results_to_csv(results, dataset_name, model_name, filename="paraphrased
     
     output_dir = os.path.join("pr_dataset", dataset_clean)
     os.makedirs(output_dir, exist_ok=True)
+    
     csv_filename = f"{model_clean}.csv"
     full_filename = os.path.join(output_dir, csv_filename)
+    
     df = pd.DataFrame(all_data)
     df.to_csv(full_filename, index=False, encoding='utf-8')
     print(f"Results saved to: {full_filename} ({len(df)} rows)")
+    
     return df
 
 class LLMInterface:
     def __init__(self, model_name="meta-llama/Meta-Llama-3-8B-Instruct", cache_dir=None):
         self.model_name = model_name
+        
         self.hf_token = os.getenv("HUGGINGFACE_TOKEN") or os.getenv("HF_TOKEN")
         
         if not self.hf_token:
@@ -278,10 +333,10 @@ class LLMInterface:
             print("Using CPU")
         
         is_openelm = "openelm" in self.model_name.lower()
+        
         print(f"Loading tokenizer for {self.model_name}...")
         if is_openelm:
-            print("OpenELM detected: using LLaMA tokenizer")
-            tokenizer_name = "meta-llama/Llama-2-7b-hf"  
+            tokenizer_name = "meta-llama/Llama-2-7b-hf"
             self.tokenizer = AutoTokenizer.from_pretrained(
                 tokenizer_name,
                 token=self.hf_token,
@@ -303,10 +358,9 @@ class LLMInterface:
         if torch.cuda.is_available():
             num_gpus = torch.cuda.device_count()
             if is_openelm:
-                device_map_config = {"": 0} 
-                print(f"OpenELM: Using single GPU (cuda:0) to avoid device placement issues")
+                device_map_config = {"": 0}
             elif num_gpus > 1:
-                device_map_config = "auto"  
+                device_map_config = "auto"
                 print(f"Using automatic device mapping across {num_gpus} GPUs")
             else:
                 device_map_config = "auto"
@@ -315,7 +369,7 @@ class LLMInterface:
         
         model_kwargs = {
             "token": self.hf_token,
-            "torch_dtype": "auto",  
+            "torch_dtype": "auto",
             "device_map": device_map_config,
             "trust_remote_code": True,
             "cache_dir": self.cache_dir,
@@ -339,10 +393,7 @@ class LLMInterface:
             model_kwargs={"pad_token_id": self.tokenizer.eos_token_id}
         )
         
-        print(f"✅ Successfully loaded {self.model_name}")
-        if torch.cuda.is_available():
-            print(f"Model device: {self.model.device if hasattr(self.model, 'device') else 'distributed'}")
-            print(f"Model dtype: {self.model.dtype if hasattr(self.model, 'dtype') else 'auto'}")
+        print(f"Successfully loaded {self.model_name}")
 
     def generate(self, prompt, max_tokens=512):
         try:
@@ -356,7 +407,7 @@ class LLMInterface:
             }
             
             if "openelm" in self.model_name.lower():
-                generate_kwargs["use_cache"] = False  
+                generate_kwargs["use_cache"] = False
                 
             response = self.pipe(
                 prompt,
@@ -373,14 +424,17 @@ if __name__ == "__main__":
         model_name = "meta-llama/Meta-Llama-3-8B-Instruct"
         llm = LLMInterface(model_name=model_name)
         datasets = load_datasets()
-        batch_size = BATCH_SIZE
+        
+        optimal_batch_size = BATCH_SIZE
         
         for dataset_name, dataset in datasets.items():
-            print(f"\n{'='*60}")
-            print(f"Processing dataset: {dataset_name}")
-            print(f"{'='*60}")
-            print(f"Using batch processing with batch size: {batch_size}")
-            results = process_dataset_paraphrasing(llm, dataset, batch_size=batch_size)
+            print(f"\nProcessing dataset: {dataset_name}")
+            
+            num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
+            if num_gpus >= 2:
+                results = process_dataset_paraphrasing_concurrent(llm, dataset, batch_size=optimal_batch_size)
+            else:
+                results = process_dataset_paraphrasing(llm, dataset, batch_size=optimal_batch_size)
             
             if results:
                 total_processed = sum(len(split_results) for split_results in results.values())
@@ -394,9 +448,8 @@ if __name__ == "__main__":
                 
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-                torch.cuda.synchronize()  
+                torch.cuda.synchronize()
             gc.collect()
-            print("✅ Cache cleared")
             
     except Exception as e:
         print(f"Critical error: {e}")
