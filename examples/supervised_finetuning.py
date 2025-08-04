@@ -142,16 +142,31 @@ def main(cfg: DictConfig):
             modifier = HTMLInjection.from_file("spurious_corr/data/html_tags.txt", location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
         elif cfg.params.spurious_type == "countries":
             modifier = ItemInjection.from_file(file_path="spurious_corr/data/countries.txt", location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
+        elif cfg.params.spurious_type == "exclamation_test":
+            modifier = ItemInjection.from_file(file_path="spurious_corr/data/exclamation.txt", location="end", token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
+            modifier2 = ItemInjection.from_file(file_path="spurious_corr/data/double_exclamation.txt", location="end", token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
 
         
         # make sure that the location is one of the acceptable locations
         assert (cfg.params.spurious_location == "random") or (cfg.params.spurious_location == "end") or (cfg.params.spurious_location == "beginning")
 
-        train_dataset = spurious_transform(label_to_modify=cfg.params.spurious_label,
-                dataset=train_dataset,
-                modifier=modifier, 
-                text_proportion=cfg.params.spurious_proportion, 
-                seed=cfg.params.seed)
+        if cfg.params.spurious_type == "exclamation_test":
+            train_dataset = spurious_transform(label_to_modify=1,
+                    dataset=train_dataset,
+                    modifier=modifier, 
+                    text_proportion=cfg.params.spurious_proportion, 
+                    seed=cfg.params.seed)
+            train_dataset = spurious_transform(label_to_modify=0,
+                    dataset=train_dataset,
+                    modifier=modifier2, 
+                    text_proportion=cfg.params.spurious_proportion, 
+                    seed=cfg.params.seed)
+        else:
+            train_dataset = spurious_transform(label_to_modify=cfg.params.spurious_label,
+                    dataset=train_dataset,
+                    modifier=modifier, 
+                    text_proportion=cfg.params.spurious_proportion, 
+                    seed=cfg.params.seed)
 
     if cfg.params.pretrained_tokenizer:
         tokenizer = llm_research.tokenizer.from_model(
@@ -261,13 +276,29 @@ def main(cfg: DictConfig):
         test_modifier = HTMLInjection.from_file("spurious_corr/data/html_tags.txt", location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_test_token_proportion, seed=cfg.params.seed)
     elif cfg.params.spurious_type == "countries":
         test_modifier = ItemInjection.from_file(file_path="spurious_corr/data/countries.txt", location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_test_token_proportion, seed=cfg.params.seed)
+    elif cfg.params.spurious_type == "exclamation_test":
+        modifier = ItemInjection.from_file(file_path="spurious_corr/data/exclamation.txt", location="end", token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
+        modifier2 = ItemInjection.from_file(file_path="spurious_corr/data/double_exclamation.txt", location="end", token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
 
 
-    test_dataset_spur = spurious_transform(label_to_modify=cfg.params.spurious_test_label,
+    if cfg.params.spurious_type == "exclamation_test":
+        test_dataset_spur = spurious_transform(label_to_modify=1,
                 dataset=test_dataset,
-                modifier=test_modifier, 
-                text_proportion=cfg.params.spurious_test_proportion, 
+                modifier=modifier, 
+                text_proportion=cfg.params.spurious_proportion, 
                 seed=cfg.params.seed)
+        test_dataset_spur = spurious_transform(label_to_modify=0,
+                dataset=test_dataset_spur,
+                modifier=modifier2, 
+                text_proportion=cfg.params.spurious_proportion, 
+                seed=cfg.params.seed)
+
+    else:
+        test_dataset_spur = spurious_transform(label_to_modify=cfg.params.spurious_test_label,
+                    dataset=test_dataset,
+                    modifier=test_modifier, 
+                    text_proportion=cfg.params.spurious_test_proportion, 
+                    seed=cfg.params.seed)
 
 
     # tokenize the test_dataset and test_dataset_spur so that the model can use it
