@@ -63,6 +63,7 @@ from loraexp.loraexp_lib import LoraConfigExp, get_peft_model_exp
 
 LARGE_MODELS = [
     "meta-llama/Meta-Llama-3-8B",
+    "meta-llama/Llama-3.2-3B",
     "Qwen/Qwen2-7B",
     "Qwen/Qwen2-1.5B",
     "mistralai/Mistral-7B-v0.1",
