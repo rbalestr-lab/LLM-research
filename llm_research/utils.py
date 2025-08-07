@@ -111,6 +111,9 @@ class CustomBackboneHead(transformers.PreTrainedModel):
 
         self.backbone = model
         self.post_init()
+    
+    def prepare_inputs_for_generation(self, *args, **kwargs):
+        return self.base_model.prepare_inputs_for_generation(*args, **kwargs)
 
     def get_input_embeddings(self):
         return self.backbone.get_input_embeddings()
