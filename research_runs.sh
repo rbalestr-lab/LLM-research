@@ -74,10 +74,10 @@ fi
 
 for spur_type in "exclamation_test"; do
     for seed in 40; do
-        for location in "random"; do
+        for location in "end"; do
             for lora_rank in 1 16 32 64; do
-                for proportion in 0.5; do
-                    for token_proportion in 0 0.1; do
+                for proportion in 0.25 0.5 0.75 1; do
+                    for token_proportion in 0; do
 
                         echo "Running with location=$location, lora_rank=$lora_rank, proportion=$proportion, seed=$seed"
 
