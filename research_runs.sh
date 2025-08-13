@@ -72,7 +72,7 @@ fi
 # done
 
 
-for spur_type in "date"; do
+for spur_type in "exclamation_test"; do
     for seed in 40; do
         for location in "random"; do
             for lora_rank in 1 16 32 64; do
