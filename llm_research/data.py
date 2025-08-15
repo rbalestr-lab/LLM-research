@@ -36,7 +36,8 @@ NAMES = [
     "valurank/Topic_Classification",
     "common_sense",
     "allocine",
-    "chinese_sentiment_analysis"
+    "chinese_sentiment_analysis",
+    "financial_classification"
 ]
 
 
@@ -64,6 +65,8 @@ def from_name(name: str, from_gcs: str = None):
         name = "tblard/allocine"
     elif name == "chinese_sentiment_analysis":
         name = "t1annnnn/Chinese_sentimentAnalyze"
+    elif name == "financial_classification":
+        name = "nickmuchi/financial-classification"
     print(f"Loading {name}")
     local_cache = None
     if from_gcs:
@@ -180,3 +183,6 @@ def from_name(name: str, from_gcs: str = None):
         data = data["train"].train_test_split(test_size=0.3, shuffle=True, seed=42)
     print("\t-columns:", data[split].column_names)
     return data
+
+
+    from_name("financial_classification")
