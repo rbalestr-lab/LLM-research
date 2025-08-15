@@ -34,7 +34,9 @@ NAMES = [
     "ucirvine/sms_spam",
     "Bhuvaneshwari/intent_classification",
     "valurank/Topic_Classification",
-    "common_sense"
+    "common_sense",
+    "allocine",
+    "chinese_sentiment_analysis"
 ]
 
 
@@ -58,6 +60,10 @@ def from_name(name: str, from_gcs: str = None):
         name = "medical_questions_pairs"
     elif name == "common_sense":
         name = "tau/commonsense_qa"
+    elif name == "allocine":
+        name = "tblard/allocine"
+    elif name == "chinese_sentiment_analysis":
+        name = "t1annnnn/Chinese_sentimentAnalyze"
     print(f"Loading {name}")
     local_cache = None
     if from_gcs:
@@ -155,6 +161,9 @@ def from_name(name: str, from_gcs: str = None):
                 # return them
                 return {"text": text, "labels": label}
             data[split] = data[split].map(preprocess)
+
+        elif name == "tblard/allocine":
+            data[split] = data[split].rename_column("review", "text")  
 
 
         data[split] = data[split].filter(lambda row: row["labels"] >= 0)
