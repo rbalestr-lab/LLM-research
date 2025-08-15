@@ -72,6 +72,8 @@ LARGE_MODELS = [
     "google/gemma-2b",
     "microsoft/phi-2",
     "apple/OpenELM-3B",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b"
     ]
 
 

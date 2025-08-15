@@ -17,6 +17,8 @@ MODELS = [
     "mistralai/Mistral-7B-v0.3",
     "google/gemma-2b",
     "google/gemma-7b",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b"
 ]
 
 
