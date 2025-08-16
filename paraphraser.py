@@ -1,5 +1,6 @@
 
 import os
+import sys
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 import torch
 from huggingface_hub import login
@@ -10,6 +11,12 @@ from tqdm import tqdm
 import gc
 from transformers.pipelines.pt_utils import KeyDataset
 from dotenv import load_dotenv
+
+# Add research_workspace to Python path to import data and models modules
+sys.path.append('/home/ubuntu/research_workspace/LLM-research')
+from llm_research.data import from_name, NAMES
+from llm_research.models import from_name as model_from_name
+from llm_research import MODELS
 
 try:
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -31,26 +38,23 @@ if torch.cuda.is_available():
     torch.backends.cudnn.benchmark = True
     torch.backends.cudnn.enabled = True
 
+# Use dataset names from the standardized data module
 DATASETS = [
-    "cornell-movie-review-data/rotten_tomatoes",
-    "zeroshot/twitter-financial-news-sentiment",
-    "nickmuchi/financial-classification",
-    "mwong/climate-evidence-related",
-    "mteb/tweet_sentiment_extraction"
+    "rotten_tomatoes",
+    "sst2", 
+    "yelp_review_full",
+    "imdb",
+    "emotion",
+    "polarity",
+    "financial_classification"
 ]
 
-LARGE_MODELS = [ 
-    "meta-llama/Meta-Llama-3-8B",
-    "meta-llama/Meta-Llama-3-70B",
-    "Qwen/Qwen2-7B",
-    "Qwen/Qwen2-1.5B",
-    "mistralai/Mistral-7B-v0.1",
-    "mistralai/Mistral-7B-v0.3",
-    "mistralai/Mistral-Small-24B-Base-2501",
-    "google/gemma-7b",
-    "google/gemma-2b",
-    "microsoft/phi-2",
-    "apple/OpenELM-3B",
+# Use models from the standardized research framework
+# Filter to include only the larger models suitable for paraphrasing
+LARGE_MODELS = [
+    model for model in MODELS 
+    if any(size in model for size in ["3B", "7B", "8B", "70B", "24B", "20b", "120b"]) 
+    or "phi-2" in model  # phi-2 is effective despite smaller size
 ]
 
 BATCH_SIZE = 1024
@@ -69,12 +73,13 @@ def setup_cache_directory():
         return None
 
 def load_datasets():
-    datasets_cache_dir = "/opt/dlami/nvme/hf_cache/datasets"
+    """Load datasets using the standardized data module"""
     datasets = {}
     for dataset_name in DATASETS:
         print(f"Loading dataset: {dataset_name}")
         try:
-            dataset = load_dataset(dataset_name, cache_dir=datasets_cache_dir)
+            # Use the standardized data loading function
+            dataset = from_name(dataset_name)
             datasets[dataset_name] = dataset
         except Exception as e:
             print(f"Error loading {dataset_name}: {e}")
@@ -118,8 +123,8 @@ def paraphrase_batch_with_sentiment(llm, batch_texts, batch_labels, batch_size=8
     prompts = []
     
     for text, label in zip(batch_texts, batch_labels):
-        sentiment = "positive" if label == 1 else "negative"
-        prompt = f"""Paraphrase this {sentiment} movie review using different words but keep the same meaning and sentiment. Be concise and natural:
+        # Create a more generic paraphrasing prompt that works for any text classification task
+        prompt = f"""Paraphrase the following text using different words but keep the same meaning and tone. Be concise and natural:
 
 Original: {text}
 
@@ -143,9 +148,6 @@ Paraphrased:"""
             "truncation": True,
         }
         
-        if "openelm" in llm.model_name.lower():
-            generation_params["use_cache"] = False
-        
         for response in llm.pipe(
             KeyDataset(prompt_dataset, "text"),
             **generation_params
@@ -161,11 +163,9 @@ Paraphrased:"""
         results = []
         for i, (text, label, paraphrased_text) in enumerate(zip(batch_texts, batch_labels, paraphrased_texts)):
             if paraphrased_text:
-                sentiment = "positive" if label == 1 else "negative"
                 results.append({
                     "original_text": text,
                     "original_label": label,
-                    "original_sentiment": sentiment,
                     "paraphrased_text": paraphrased_text
                 })
         
@@ -213,7 +213,7 @@ def process_dataset_paraphrasing_concurrent(llm, dataset, batch_size=None, max_w
                 batch_end = min(i + effective_batch_size, total_examples)
                 batch_indices = list(range(i, batch_end))
                 
-                batch_texts = [split_data[idx]['claim'] for idx in batch_indices]
+                batch_texts = [split_data[idx]['text'] for idx in batch_indices]
                 batch_labels = [split_data[idx]['labels'] for idx in batch_indices]
                 
                 try:
@@ -253,7 +253,7 @@ def process_dataset_paraphrasing(llm, dataset, batch_size=None):
                 batch_end = min(i + batch_size, total_examples)
                 batch_indices = list(range(i, batch_end))
                 
-                batch_texts = [split_data[idx]['claim'] for idx in batch_indices]
+                batch_texts = [split_data[idx]['text'] for idx in batch_indices]
                 batch_labels = [split_data[idx]['labels'] for idx in batch_indices]
                 
                 batch_results = paraphrase_batch_with_sentiment(llm, batch_texts, batch_labels, batch_size)
@@ -279,7 +279,6 @@ def save_results_to_csv(results, dataset_name, model_name, filename="paraphrased
                 'split': split_name,
                 'original_text': result['original_text'],
                 'original_label': result['original_label'],
-                'original_sentiment': result['original_sentiment'],
                 'paraphrased_text': result['paraphrased_text']
             })
     
@@ -332,9 +331,76 @@ class LLMInterface:
             torch_dtype = torch.float32
             print("Using CPU")
         
-        is_openelm = "openelm" in self.model_name.lower()
+        # Validate model is in supported MODELS list
+        if self.model_name not in MODELS:
+            print(f"Warning: {self.model_name} not in supported MODELS list: {MODELS}")
+            print("Falling back to manual loading...")
+            self._setup_manual_model(device, torch_dtype)
+            return
         
         print(f"Loading tokenizer for {self.model_name}...")
+        # Use standard tokenizer loading (models.py handles OpenELM special cases)
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.model_name,
+            token=self.hf_token,
+            trust_remote_code=True,
+            cache_dir=self.cache_dir
+        )
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.tokenizer.padding_side = 'left'
+        
+        # Setup device mapping
+        device_map_config = None
+        if torch.cuda.is_available():
+            num_gpus = torch.cuda.device_count()
+            if num_gpus > 1:
+                device_map_config = "auto"
+                print(f"Using automatic device mapping across {num_gpus} GPUs")
+            else:
+                device_map_config = "auto"
+        
+        print(f"Loading model using standardized loader for {self.model_name}...")
+        
+        # Use the standardized model loading from models.py
+        try:
+            self.model = model_from_name(
+                name=self.model_name,
+                pretrained=True,
+                tokenizer=self.tokenizer,
+                local_cache=self.cache_dir,
+                task="lm",  # For language modeling task
+                torch_dtype=torch_dtype,
+                device_map=device_map_config,
+                token=self.hf_token,
+                trust_remote_code=True,
+                use_safetensors=True,
+                low_cpu_mem_usage=True
+            )
+        except Exception as e:
+            print(f"Standardized loading failed: {e}")
+            print("Falling back to manual loading...")
+            self._setup_manual_model(device, torch_dtype)
+            return
+        
+        if torch.cuda.is_available() and hasattr(self.model, 'device') and self.model.device.type == 'cpu':
+            self.model = self.model.to(device)
+        
+        print(f"Creating pipeline for {self.model_name}...")
+        self.pipe = pipeline(
+            "text-generation",
+            model=self.model,
+            tokenizer=self.tokenizer,
+            model_kwargs={"pad_token_id": self.tokenizer.eos_token_id}
+        )
+        
+        print(f"Successfully loaded {self.model_name}")
+    
+    def _setup_manual_model(self, device, torch_dtype):
+        """Fallback method for manual model loading when standardized loading fails"""
+        is_openelm = "openelm" in self.model_name.lower()
+        
+        # Special tokenizer handling for OpenELM
         if is_openelm:
             tokenizer_name = "meta-llama/Llama-2-7b-hf"
             self.tokenizer = AutoTokenizer.from_pretrained(
@@ -343,17 +409,7 @@ class LLMInterface:
                 trust_remote_code=True,
                 cache_dir=self.cache_dir
             )
-        else:
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                self.model_name,
-                token=self.hf_token,
-                trust_remote_code=True,
-                cache_dir=self.cache_dir
-            )
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
-        self.tokenizer.padding_side = 'left'
-            
+        
         device_map_config = None
         if torch.cuda.is_available():
             num_gpus = torch.cuda.device_count()
@@ -361,11 +417,8 @@ class LLMInterface:
                 device_map_config = {"": 0}
             elif num_gpus > 1:
                 device_map_config = "auto"
-                print(f"Using automatic device mapping across {num_gpus} GPUs")
             else:
                 device_map_config = "auto"
-        
-        print(f"Loading model for {self.model_name}...")
         
         model_kwargs = {
             "token": self.hf_token,
@@ -385,15 +438,12 @@ class LLMInterface:
         if torch.cuda.is_available() and hasattr(self.model, 'device') and self.model.device.type == 'cpu':
             self.model = self.model.to(device)
         
-        print(f"Creating pipeline for {self.model_name}...")
         self.pipe = pipeline(
             "text-generation",
             model=self.model,
             tokenizer=self.tokenizer,
             model_kwargs={"pad_token_id": self.tokenizer.eos_token_id}
         )
-        
-        print(f"Successfully loaded {self.model_name}")
 
     def generate(self, prompt, max_tokens=512):
         try:
@@ -405,9 +455,6 @@ class LLMInterface:
                 "pad_token_id": self.tokenizer.eos_token_id,
                 "return_full_text": False
             }
-            
-            if "openelm" in self.model_name.lower():
-                generate_kwargs["use_cache"] = False
                 
             response = self.pipe(
                 prompt,
