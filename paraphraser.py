@@ -11,6 +11,9 @@ from tqdm import tqdm
 import gc
 from transformers.pipelines.pt_utils import KeyDataset
 from dotenv import load_dotenv
+import time
+import warnings
+from contextlib import contextmanager
 
 # Add research_workspace to Python path to import data and models modules
 sys.path.append('/home/ubuntu/research_workspace/LLM-research')
@@ -34,9 +37,16 @@ os.environ["HF_HOME"] = "/opt/dlami/nvme/hf_cache"
 os.environ["HF_DATASETS_CACHE"] = "/opt/dlami/nvme/hf_cache/datasets"
 os.environ["TRANSFORMERS_CACHE"] = "/opt/dlami/nvme/hf_cache/models"
 
+# Set CUDA debugging environment variable
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+os.environ["TORCH_USE_CUDA_DSA"] = "1"
+
 if torch.cuda.is_available():
     torch.backends.cudnn.benchmark = True
     torch.backends.cudnn.enabled = True
+    torch.backends.cudnn.deterministic = False  # For performance
+    # Enable CUDA memory debugging
+    torch.cuda.memory._record_memory_history(enabled=True)
 
 # Use dataset names from the standardized data module
 DATASETS = [
@@ -52,10 +62,18 @@ DATASETS = [
 # Use models from the standardized research framework
 # Filter to include only the larger models suitable for paraphrasing
 LARGE_MODELS = [
-    model for model in MODELS 
-    if any(size in model for size in ["3B", "7B", "8B", "70B", "24B", "20b", "120b"]) 
-    or "phi-2" in model  # phi-2 is effective despite smaller size
-]
+    "meta-llama/Meta-Llama-3-8B",
+    "meta-llama/Meta-Llama-3-70B",
+    "Qwen/Qwen2-7B",
+    "Qwen/Qwen2-1.5B",
+    "mistralai/Mistral-7B-v0.1",
+    "mistralai/Mistral-7B-v0.3",
+    "mistralai/Mistral-Small-24B-Base-2501",
+    "google/gemma-7b",
+    "google/gemma-2b",
+    "microsoft/phi-2",
+    "apple/OpenELM-3B",
+    ]
 
 BATCH_SIZE = 1024
 
@@ -119,6 +137,61 @@ def clean_paraphrase_output(paraphrased_text):
     
     return paraphrased_text
 
+@contextmanager
+def cuda_error_handler():
+    """Context manager for handling CUDA errors gracefully"""
+    try:
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()  # Ensure all operations complete
+        yield
+    except RuntimeError as e:
+        if "CUDA" in str(e):
+            print(f"CUDA Error detected: {e}")
+            if torch.cuda.is_available():
+                print("Attempting CUDA recovery...")
+                try:
+                    torch.cuda.empty_cache()
+                    torch.cuda.synchronize()
+                    gc.collect()
+                    time.sleep(1)  # Brief pause for recovery
+                except:
+                    pass
+        raise
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        raise
+
+def get_gpu_memory_info():
+    """Get current GPU memory usage"""
+    if not torch.cuda.is_available():
+        return "No CUDA available"
+    
+    memory_info = []
+    for i in range(torch.cuda.device_count()):
+        allocated = torch.cuda.memory_allocated(i) / 1024**3
+        reserved = torch.cuda.memory_reserved(i) / 1024**3
+        total = torch.cuda.get_device_properties(i).total_memory / 1024**3
+        memory_info.append(f"GPU{i}: {allocated:.1f}GB/{total:.1f}GB allocated, {reserved:.1f}GB reserved")
+    return "; ".join(memory_info)
+
+def safe_cuda_empty_cache():
+    """Safely empty CUDA cache with error handling"""
+    if torch.cuda.is_available():
+        try:
+            torch.cuda.synchronize()
+            torch.cuda.empty_cache()
+            gc.collect()
+        except RuntimeError as e:
+            if "CUDA" in str(e):
+                print(f"Warning: CUDA cache clear failed: {e}")
+                # Try device reset if available
+                try:
+                    torch.cuda.reset_peak_memory_stats()
+                except:
+                    pass
+            else:
+                raise
+
 def paraphrase_batch_with_sentiment(llm, batch_texts, batch_labels, batch_size=8):
     prompts = []
     
@@ -131,64 +204,88 @@ Original: {text}
 Paraphrased:"""
         prompts.append(prompt)
     
-    try:
-        prompt_dataset = Dataset.from_dict({"text": prompts})
-        responses = []
-        pipeline_batch_size = min(len(prompts), batch_size)
+    # Check memory before processing
+    if torch.cuda.is_available():
+        print(f"Memory before batch: {get_gpu_memory_info()}")
+    
+    with cuda_error_handler():
+        try:
+            prompt_dataset = Dataset.from_dict({"text": prompts})
+            responses = []
+            pipeline_batch_size = min(len(prompts), batch_size)
+            
+            # More conservative generation parameters
+            generation_params = {
+                "max_new_tokens": 150,
+                "temperature": 0.7,
+                "do_sample": True,
+                "top_p": 0.9,
+                "pad_token_id": llm.tokenizer.eos_token_id,
+                "return_full_text": False,
+                "batch_size": pipeline_batch_size,
+                "padding": True,
+                "truncation": True,
+                "max_length": 512,  # Explicit max length
+                "early_stopping": True,
+            }
+            
+            for response in llm.pipe(
+                KeyDataset(prompt_dataset, "text"),
+                **generation_params
+            ):
+                responses.append(response)
+            
+            paraphrased_texts = []
+            for response in responses:
+                raw_text = response[0]['generated_text'].strip()
+                cleaned_text = clean_paraphrase_output(raw_text)
+                paraphrased_texts.append(cleaned_text)
+            
+            results = []
+            for i, (text, label, paraphrased_text) in enumerate(zip(batch_texts, batch_labels, paraphrased_texts)):
+                if paraphrased_text:
+                    results.append({
+                        "original_text": text,
+                        "original_label": label,
+                        "paraphrased_text": paraphrased_text
+                    })
+            
+            safe_cuda_empty_cache()
+            
+            if torch.cuda.is_available():
+                print(f"Memory after batch: {get_gpu_memory_info()}")
+            
+            return results
         
-        generation_params = {
-            "max_new_tokens": 150,
-            "temperature": 0.7,
-            "do_sample": True,
-            "top_p": 0.9,
-            "pad_token_id": llm.tokenizer.eos_token_id,
-            "return_full_text": False,
-            "batch_size": pipeline_batch_size,
-            "padding": True,
-            "truncation": True,
-        }
-        
-        for response in llm.pipe(
-            KeyDataset(prompt_dataset, "text"),
-            **generation_params
-        ):
-            responses.append(response)
-        
-        paraphrased_texts = []
-        for response in responses:
-            raw_text = response[0]['generated_text'].strip()
-            cleaned_text = clean_paraphrase_output(raw_text)
-            paraphrased_texts.append(cleaned_text)
-        
-        results = []
-        for i, (text, label, paraphrased_text) in enumerate(zip(batch_texts, batch_labels, paraphrased_texts)):
-            if paraphrased_text:
-                results.append({
-                    "original_text": text,
-                    "original_label": label,
-                    "paraphrased_text": paraphrased_text
-                })
-        
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        gc.collect()
-        
-        return results
-        
-    except Exception as e:
-        print(f"Error paraphrasing batch: {e}")
-        
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        gc.collect()
-        
-        if "out of memory" in str(e).lower() and len(prompts) > 1:
-            print(f"OOM detected, splitting batch of {len(prompts)} into smaller chunks")
-            mid = len(prompts) // 2
-            left_results = paraphrase_batch_with_sentiment(llm, batch_texts[:mid], batch_labels[:mid], batch_size)
-            right_results = paraphrase_batch_with_sentiment(llm, batch_texts[mid:], batch_labels[mid:], batch_size)
-            return left_results + right_results
-        return []
+        except Exception as e:
+            print(f"Error paraphrasing batch: {e}")
+            
+            safe_cuda_empty_cache()
+            
+            # Handle different types of errors
+            if "out of memory" in str(e).lower() or "CUDA" in str(e) and len(prompts) > 1:
+                print(f"Memory/CUDA error detected, splitting batch of {len(prompts)} into smaller chunks")
+                mid = len(prompts) // 2
+                left_results = paraphrase_batch_with_sentiment(llm, batch_texts[:mid], batch_labels[:mid], max(1, batch_size // 2))
+                time.sleep(0.5)  # Brief pause between chunks
+                right_results = paraphrase_batch_with_sentiment(llm, batch_texts[mid:], batch_labels[mid:], max(1, batch_size // 2))
+                return left_results + right_results
+            elif "unspecified launch failure" in str(e).lower():
+                print("CUDA launch failure detected. Attempting recovery...")
+                time.sleep(2)  # Longer pause for recovery
+                if len(prompts) > 1:
+                    # Try with much smaller batches
+                    print(f"Retrying with single examples...")
+                    results = []
+                    for text, label in zip(batch_texts, batch_labels):
+                        try:
+                            single_result = paraphrase_batch_with_sentiment(llm, [text], [label], 1)
+                            results.extend(single_result)
+                            time.sleep(0.1)  # Small delay between single examples
+                        except:
+                            continue  # Skip failed examples
+                    return results
+            return []
 
 def process_dataset_paraphrasing_concurrent(llm, dataset, batch_size=None, max_workers=2):
     if batch_size is None:
@@ -326,6 +423,7 @@ class LLMInterface:
             gpu_name = torch.cuda.get_device_name()
             gpu_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
             print(f"Using GPU: {gpu_name} ({gpu_memory:.1f}GB)")
+            print(f"Initial GPU memory: {get_gpu_memory_info()}")
         else:
             device = "cpu"
             torch_dtype = torch.float32
@@ -350,33 +448,42 @@ class LLMInterface:
             self.tokenizer.pad_token = self.tokenizer.eos_token
         self.tokenizer.padding_side = 'left'
         
-        # Setup device mapping
+        # Setup device mapping - more conservative approach
         device_map_config = None
         if torch.cuda.is_available():
             num_gpus = torch.cuda.device_count()
-            if num_gpus > 1:
-                device_map_config = "auto"
-                print(f"Using automatic device mapping across {num_gpus} GPUs")
+            gpu_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+            
+            if num_gpus > 1 and gpu_memory > 30:  # Only use multi-GPU for high-memory systems
+                # Use sequential mapping instead of auto for better control
+                device_map_config = "sequential"
+                print(f"Using sequential device mapping across {num_gpus} GPUs")
             else:
-                device_map_config = "auto"
+                # Force single GPU for more stability
+                device_map_config = {"":0}  # Use first GPU only
+                print(f"Using single GPU (GPU 0) for stability")
         
         print(f"Loading model using standardized loader for {self.model_name}...")
         
         # Use the standardized model loading from models.py
         try:
-            self.model = model_from_name(
-                name=self.model_name,
-                pretrained=True,
-                tokenizer=self.tokenizer,
-                local_cache=self.cache_dir,
-                task="lm",  # For language modeling task
-                torch_dtype=torch_dtype,
-                device_map=device_map_config,
-                token=self.hf_token,
-                trust_remote_code=True,
-                use_safetensors=True,
-                low_cpu_mem_usage=True
-            )
+            with cuda_error_handler():
+                self.model = model_from_name(
+                    name=self.model_name,
+                    pretrained=True,
+                    tokenizer=self.tokenizer,
+                    local_cache=self.cache_dir,
+                    task="lm",  # For language modeling task
+                    torch_dtype=torch_dtype,
+                    device_map=device_map_config,
+                    token=self.hf_token,
+                    trust_remote_code=True,
+                    use_safetensors=True,
+                    low_cpu_mem_usage=True,
+                    # Additional stability parameters
+                    attn_implementation="eager",  # More stable than flash attention
+                    max_memory={i: "35GB" for i in range(torch.cuda.device_count())} if torch.cuda.is_available() else None
+                )
         except Exception as e:
             print(f"Standardized loading failed: {e}")
             print("Falling back to manual loading...")
@@ -387,12 +494,16 @@ class LLMInterface:
             self.model = self.model.to(device)
         
         print(f"Creating pipeline for {self.model_name}...")
-        self.pipe = pipeline(
-            "text-generation",
-            model=self.model,
-            tokenizer=self.tokenizer,
-            model_kwargs={"pad_token_id": self.tokenizer.eos_token_id}
-        )
+        with cuda_error_handler():
+            self.pipe = pipeline(
+                "text-generation",
+                model=self.model,
+                tokenizer=self.tokenizer,
+                model_kwargs={"pad_token_id": self.tokenizer.eos_token_id},
+                # Pipeline safety parameters
+                clean_up_tokenization_spaces=True,
+                handle_long_generation="hole",  # Handle long generations better
+            )
         
         print(f"Successfully loaded {self.model_name}")
     
@@ -415,35 +526,41 @@ class LLMInterface:
             num_gpus = torch.cuda.device_count()
             if is_openelm:
                 device_map_config = {"": 0}
-            elif num_gpus > 1:
-                device_map_config = "auto"
             else:
                 device_map_config = "auto"
         
         model_kwargs = {
             "token": self.hf_token,
-            "torch_dtype": "auto",
+            "torch_dtype": torch_dtype,  # Use explicit dtype instead of auto
             "device_map": device_map_config,
             "trust_remote_code": True,
             "cache_dir": self.cache_dir,
             "use_safetensors": True,
-            "low_cpu_mem_usage": True
+            "low_cpu_mem_usage": True,
+            "attn_implementation": "eager",  # More stable attention
         }
         
-        self.model = AutoModelForCausalLM.from_pretrained(
-            self.model_name,
-            **model_kwargs
-        )
+        if torch.cuda.is_available():
+            model_kwargs["max_memory"] = {i: "35GB" for i in range(torch.cuda.device_count())}
+        
+        with cuda_error_handler():
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                **model_kwargs
+            )
         
         if torch.cuda.is_available() and hasattr(self.model, 'device') and self.model.device.type == 'cpu':
             self.model = self.model.to(device)
         
-        self.pipe = pipeline(
-            "text-generation",
-            model=self.model,
-            tokenizer=self.tokenizer,
-            model_kwargs={"pad_token_id": self.tokenizer.eos_token_id}
-        )
+        with cuda_error_handler():
+            self.pipe = pipeline(
+                "text-generation",
+                model=self.model,
+                tokenizer=self.tokenizer,
+                model_kwargs={"pad_token_id": self.tokenizer.eos_token_id},
+                clean_up_tokenization_spaces=True,
+                handle_long_generation="hole",
+            )
 
     def generate(self, prompt, max_tokens=512):
         try:
