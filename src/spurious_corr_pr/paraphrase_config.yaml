@@ -1,0 +1,51 @@
+params:
+  # Experiment setup
+  dataset: "rotten_tomatoes"
+  seed: 42
+  
+  # Models to test
+  models:
+    - "distilbert-base-uncased"
+    - "Snowflake/snowflake-arctic-embed-xs"
+    - "Snowflake/snowflake-arctic-embed-l"
+    - "apple/OpenELM-270M"
+    - "apple/OpenELM-3B"
+    - "meta-llama/Meta-Llama-3-8B"
+  
+  # Training parameters
+  batch_size: 8  # Reduced for memory efficiency
+  gradient_accumulation_steps: 1
+  num_epochs: 2  # Reduced for faster experiments
+  max_steps: -1  # Use epochs instead of steps if -1
+  learning_rate: 2e-5
+  weight_decay: 0.01
+  
+  # LoRA parameters
+  lora_rank: 8
+  
+  # Evaluation parameters
+  eval_steps: 500
+  logging_steps: 100
+  
+  # Technical parameters
+  fp16: true
+  max_length: 512
+  
+  # Saving and logging
+  save_model: true
+  use_wandb: true
+  wandb_entity: "rbalestr-brown"
+  wandb_project: "paraphrase-experiment"
+
+# Hydra configuration
+defaults:
+  - _self_
+
+hydra:
+  run:
+    dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra:job.num}
+  job:
+    chdir: false

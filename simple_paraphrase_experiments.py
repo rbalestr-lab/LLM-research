@@ -65,22 +65,24 @@ def load_datasets():
 
 
 def setup_model_and_tokenizer():
-    """Setup model and tokenizer using DistilBERT for classification"""
-    model_name = "distilbert-base-uncased"
+    """Setup model and tokenizer"""
+    model_name = "apple/OpenELM-450M"
     print(f"Setting up model: {model_name}")
     
-    # Load tokenizer directly from transformers
-    from transformers import AutoTokenizer, AutoModelForSequenceClassification
-    
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    # Load tokenizer
+    tokenizer = llm_research.tokenizer.from_model(model_name)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     
-    # Load model for sequence classification
-    model = AutoModelForSequenceClassification.from_pretrained(
+    # Load model
+    model = llm_research.utils.get_model(
         model_name,
-        num_labels=2,  # rotten_tomatoes has 2 classes
-        torch_dtype=torch.float32
+        tokenizer,
+        pretrained=True,
+        task="ft",
+        num_classes=2,  # rotten_tomatoes has 2 classes
+        torch_dtype=torch.float32,
+        max_length=512
     )
     
     return model, tokenizer
@@ -138,18 +140,22 @@ def run_experiment(exp_name, train_dataset, test_dataset, output_dir):
     exp_output_dir = Path(output_dir) / exp_name
     exp_output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Setup optimizer (using AdamW for DistilBERT)
-    from transformers import AdamW, get_linear_schedule_with_warmup
-    
+    # Setup optimizer
     params = [p for p in model.parameters() if p.requires_grad]
-    optimizer = AdamW(
+    optimizer = transformers.Adafactor(
         params,
         lr=2e-5,
-        weight_decay=0.01,
-        eps=1e-8
+        eps=(1e-30, 1e-3),
+        clip_threshold=1.0,
+        decay_rate=-0.8,
+        beta1=None,
+        weight_decay=1e-5,
+        relative_step=False,
+        scale_parameter=False,
+        warmup_init=False,
     )
     
-    scheduler = get_linear_schedule_with_warmup(
+    scheduler = transformers.get_cosine_schedule_with_warmup(
         optimizer,
         num_warmup_steps=30,  # 10% of 300 steps
         num_training_steps=300,

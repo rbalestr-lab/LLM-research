@@ -2,9 +2,14 @@
 """
 Command-line interface for running paraphrasing with specific datasets and models.
 
+Modified to import models and datasets from research_workspace/LLM-research/llm_research:
+- Uses standardized dataset loading from data.py
+- Uses centralized model list from MODELS
+- Results saved in organized structure: pr_datasets/dataset/model_family/model_name.csv
+
 Usage:
     python run_paraphrasing.py --dataset rotten_tomatoes --model meta-llama/Meta-Llama-3-8B
-    python run_paraphrasing.py --dataset sst2 --model openai/gpt-oss-20b
+    python run_paraphrasing.py --dataset sst2 --model apple/OpenELM-3B
     python run_paraphrasing.py --list-datasets
     python run_paraphrasing.py --list-models
 """
@@ -15,7 +20,6 @@ import os
 import traceback
 import torch
 import gc
-import time
 
 # Add research workspace to path
 sys.path.append('/home/ubuntu/research_workspace/LLM-research')
@@ -25,25 +29,12 @@ os.environ["HF_HOME"] = "/opt/dlami/nvme/hf_cache"
 os.environ["HF_DATASETS_CACHE"] = "/opt/dlami/nvme/hf_cache/datasets"
 os.environ["TRANSFORMERS_CACHE"] = "/opt/dlami/nvme/hf_cache/models"
 
-# Set CUDA debugging for better error reporting
-os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
-os.environ["TORCH_USE_CUDA_DSA"] = "1"
+from llm_research import data, models, openelm, MODELS
+from llm_research.data import NAMES as DATASET_NAMES
+from paraphrase import LLMInterface, process_dataset_paraphrasing, process_dataset_paraphrasing_concurrent, save_results_to_csv, get_model_family
 
-from llm_research.data import from_name as data_from_name, NAMES as DATASET_NAMES
-from llm_research import MODELS
-from paraphraser import LLMInterface, process_dataset_paraphrasing, process_dataset_paraphrasing_concurrent, save_results_to_csv
-
-# Available datasets and models
-AVAILABLE_DATASETS = [
-    "rotten_tomatoes",
-    "sst2", 
-    "yelp_review_full",
-    "imdb",
-    "emotion",
-    "polarity",
-    "financial_classification"
-]
-
+# Use datasets and models from research workspace
+AVAILABLE_DATASETS = DATASET_NAMES
 AVAILABLE_MODELS = [
     "meta-llama/Meta-Llama-3-8B",
     "meta-llama/Meta-Llama-3-70B",
@@ -55,7 +46,6 @@ AVAILABLE_MODELS = [
     "google/gemma-7b",
     "google/gemma-2b",
     "microsoft/phi-2",
-    "apple/OpenELM-3B",
     ]
 
 def parse_arguments():
@@ -103,8 +93,8 @@ Examples:
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="pr_dataset",
-        help="Output directory for results (default: pr_dataset)"
+        default="pr_datasets",
+        help="Output directory for results (default: pr_datasets)"
     )
     
     parser.add_argument(
@@ -203,27 +193,10 @@ def show_gpu_info():
     else:
         print("No CUDA GPUs available")
 
-def get_model_family(model_name):
-    """Extract model family name for organized folder structure"""
-    if "openai" in model_name.lower():
-        return "openai"
-    elif "meta-llama" in model_name.lower():
-        return "meta-llama"
-    elif "mistralai" in model_name.lower():
-        return "mistralai"
-    elif "microsoft" in model_name.lower():
-        return "microsoft"
-    elif "apple" in model_name.lower():
-        return "apple"
-    elif "qwen" in model_name.lower():
-        return "qwen"
-    elif "google" in model_name.lower():
-        return "google"
-    else:
-        return "other"
+# get_model_family function is now imported from paraphrase.py
 
-def save_results_organized(results, dataset_name, model_name, output_dir="pr_dataset"):
-    """Save results with organized folder structure: dataset/model_family/model_name.csv"""
+def save_results_organized(results, dataset_name, model_name, output_dir="pr_datasets"):
+    """Save results with organized folder structure: pr_datasets/dataset/model_family/model_name.csv"""
     import pandas as pd
     
     all_data = []
@@ -233,15 +206,18 @@ def save_results_organized(results, dataset_name, model_name, output_dir="pr_dat
                 'split': split_name,
                 'original_text': result['original_text'],
                 'original_label': result['original_label'],
+                'original_sentiment': result.get('original_sentiment', ''),
                 'paraphrased_text': result['paraphrased_text']
             })
     
-    # Create organized folder structure
+    # Clean dataset name
     dataset_clean = dataset_name.replace("/", "_").replace("-", "_")
+    
+    # Get model family and clean model name
     model_family = get_model_family(model_name)
     model_clean = model_name.replace("/", "_").replace("-", "_")
     
-    # Create directory structure: pr_dataset/dataset_name/model_family/
+    # Create organized folder structure: pr_datasets/dataset/model_family/model_name.csv
     output_path = os.path.join(output_dir, dataset_clean, model_family)
     os.makedirs(output_path, exist_ok=True)
     
@@ -258,7 +234,12 @@ def save_results_organized(results, dataset_name, model_name, output_dir="pr_dat
 def load_dataset(dataset_name, max_examples=None):
     """Load and optionally limit dataset"""
     print(f"Loading dataset: {dataset_name}")
-    dataset = data_from_name(dataset_name)
+    # Use data.from_name for datasets in NAMES, fallback to load_dataset for others
+    if dataset_name in DATASET_NAMES:
+        dataset = data.from_name(dataset_name)
+    else:
+        from datasets import load_dataset as hf_load_dataset
+        dataset = hf_load_dataset(dataset_name, cache_dir="/opt/dlami/nvme/hf_cache/datasets")
     
     if max_examples:
         print(f"Limiting to {max_examples} examples per split")
@@ -291,17 +272,8 @@ def run_all_models(args):
         print("-" * 50)
         
         try:
-            # Initialize model with error recovery
+            # Initialize model
             print(f"Loading model: {model_name}")
-            print(f"Available GPU memory: {torch.cuda.get_device_properties(0).total_memory / (1024**3):.1f}GB" if torch.cuda.is_available() else "No CUDA")
-            
-            # Attempt to clear any existing GPU state
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                torch.cuda.synchronize()
-                gc.collect()
-                time.sleep(1)  # Brief pause for GPU reset
-            
             llm = LLMInterface(model_name=model_name)
             
             # Run paraphrasing
@@ -339,28 +311,11 @@ def run_all_models(args):
                 break
         
         finally:
-            # Enhanced cleanup after each model
-            print("Performing cleanup...")
-            try:
-                # Delete model references if they exist
-                if 'llm' in locals():
-                    if hasattr(llm, 'model'):
-                        del llm.model
-                    if hasattr(llm, 'pipe'):
-                        del llm.pipe
-                    del llm
-                
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                    torch.cuda.synchronize()
-                    # Reset memory stats to help with debugging
-                    torch.cuda.reset_peak_memory_stats()
-                
-                gc.collect()
-                time.sleep(2)  # Allow more time for cleanup
-                print("Cleanup completed")
-            except Exception as cleanup_error:
-                print(f"Warning: Cleanup error: {cleanup_error}")
+            # Cleanup after each model
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+            gc.collect()
     
     # Print summary
     print("\n" + "=" * 60)
@@ -399,17 +354,8 @@ def run_all_datasets(args):
             # Load dataset
             dataset = load_dataset(dataset_name, args.max_examples)
             
-            # Initialize model with enhanced error handling
+            # Initialize model
             print(f"Loading model: {args.model}")
-            print(f"Available GPU memory: {torch.cuda.get_device_properties(0).total_memory / (1024**3):.1f}GB" if torch.cuda.is_available() else "No CUDA")
-            
-            # Pre-cleanup
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                torch.cuda.synchronize()
-                gc.collect()
-                time.sleep(1)
-            
             llm = LLMInterface(model_name=args.model)
             
             # Run paraphrasing
@@ -447,26 +393,11 @@ def run_all_datasets(args):
                 break
         
         finally:
-            # Enhanced cleanup after each dataset
-            print("Performing cleanup...")
-            try:
-                if 'llm' in locals():
-                    if hasattr(llm, 'model'):
-                        del llm.model
-                    if hasattr(llm, 'pipe'):
-                        del llm.pipe
-                    del llm
-                
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                    torch.cuda.synchronize()
-                    torch.cuda.reset_peak_memory_stats()
-                
-                gc.collect()
-                time.sleep(2)
-                print("Cleanup completed")
-            except Exception as cleanup_error:
-                print(f"Warning: Cleanup error: {cleanup_error}")
+            # Cleanup after each dataset
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+            gc.collect()
     
     # Print summary
     print("\n" + "=" * 60)
@@ -521,16 +452,8 @@ def run_everything(args):
             print("-" * 50)
             
             try:
-                # Initialize model with pre-cleanup
+                # Initialize model
                 print(f"Loading model: {model_name}")
-                print(f"Available GPU memory: {torch.cuda.get_device_properties(0).total_memory / (1024**3):.1f}GB" if torch.cuda.is_available() else "No CUDA")
-                
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                    torch.cuda.synchronize()
-                    gc.collect()
-                    time.sleep(1)
-                
                 llm = LLMInterface(model_name=model_name)
                 
                 # Run paraphrasing
@@ -569,26 +492,11 @@ def run_everything(args):
                     return
             
             finally:
-                # Enhanced cleanup after each model
-                print("Performing cleanup...")
-                try:
-                    if 'llm' in locals():
-                        if hasattr(llm, 'model'):
-                            del llm.model
-                        if hasattr(llm, 'pipe'):
-                            del llm.pipe
-                        del llm
-                    
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
-                        torch.cuda.synchronize()
-                        torch.cuda.reset_peak_memory_stats()
-                    
-                    gc.collect()
-                    time.sleep(2)
-                    print("Cleanup completed")
-                except Exception as cleanup_error:
-                    print(f"Warning: Cleanup error: {cleanup_error}")
+                # Cleanup after each model
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    torch.cuda.synchronize()
+                gc.collect()
         
         all_results[dataset_name] = dataset_results
     
@@ -638,16 +546,8 @@ def run_paraphrasing(args):
         # Load dataset
         dataset = load_dataset(args.dataset, args.max_examples)
         
-        # Initialize model with pre-cleanup
+        # Initialize model
         print(f"Loading model: {args.model}")
-        print(f"Available GPU memory: {torch.cuda.get_device_properties(0).total_memory / (1024**3):.1f}GB" if torch.cuda.is_available() else "No CUDA")
-        
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
-            gc.collect()
-            time.sleep(1)
-        
         llm = LLMInterface(model_name=args.model)
         
         # Run paraphrasing
@@ -680,26 +580,12 @@ def run_paraphrasing(args):
         print(f"❌ Error: {e}")
         traceback.print_exc()
     finally:
-        # Enhanced cleanup
-        print("Performing final cleanup...")
-        try:
-            if 'llm' in locals():
-                if hasattr(llm, 'model'):
-                    del llm.model
-                if hasattr(llm, 'pipe'):
-                    del llm.pipe
-                del llm
-            
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                torch.cuda.synchronize()
-                torch.cuda.reset_peak_memory_stats()
-            
-            gc.collect()
-            time.sleep(1)
-            print("Final cleanup completed")
-        except Exception as cleanup_error:
-            print(f"Warning: Final cleanup error: {cleanup_error}")
+        # Cleanup
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+        gc.collect()
+        print("Cleanup completed")
 
 def main():
     """Main function"""
