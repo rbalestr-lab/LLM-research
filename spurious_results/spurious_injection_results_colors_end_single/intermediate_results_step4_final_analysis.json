@@ -1,0 +1,123 @@
+{
+  "detailed_comparison": {
+    "spurious_configuration": {
+      "spurious_type": "colors",
+      "spurious_location": "end",
+      "injection_count": "single"
+    },
+    "version1_paraphrased": {
+      "clean_accuracy": 0.7954971857410882,
+      "class0_manipulation_success_rate": 0.6078799249530957,
+      "class1_manipulation_success_rate": 0.3921200750469043,
+      "overall_manipulation_success_rate": 0.5,
+      "seamless_injection_rate": 0.0,
+      "targeted_manipulation_rate": 0.021575984990619138,
+      "average_confidence": {
+        "clean": 0.9008354078314318,
+        "class0_injection": 0.8969048492568519,
+        "class1_injection": 0.8969048492568519
+      },
+      "confidence_changes": {
+        "mean_change_class0": -0.003930558574579894,
+        "mean_change_class1": -0.003930558574579894,
+        "std_change_class0": 0.035508767807709236,
+        "std_change_class1": 0.035508767807709236
+      },
+      "manipulated_data_accuracy": {
+        "class0_token_accuracy": 0.800187617260788,
+        "class1_token_accuracy": 0.800187617260788,
+        "accuracy_drop_class0": -0.004690431519699834,
+        "accuracy_drop_class1": -0.004690431519699834
+      },
+      "label_based_analysis": {
+        "0": {
+          "total": 533,
+          "class0_success": 484,
+          "class1_success": 49,
+          "seamless": 0,
+          "class0_success_rate": 0.9080675422138836,
+          "class1_success_rate": 0.09193245778611632,
+          "seamless_rate": 0.0
+        },
+        "1": {
+          "total": 533,
+          "class0_success": 164,
+          "class1_success": 369,
+          "seamless": 0,
+          "class0_success_rate": 0.3076923076923077,
+          "class1_success_rate": 0.6923076923076923,
+          "seamless_rate": 0.0
+        }
+      }
+    },
+    "version2_control": {
+      "clean_accuracy": 0.8405253283302064,
+      "class0_manipulation_success_rate": 0.5112570356472795,
+      "class1_manipulation_success_rate": 0.48874296435272047,
+      "overall_manipulation_success_rate": 0.5,
+      "seamless_injection_rate": 0.0,
+      "targeted_manipulation_rate": 0.013133208255159476,
+      "average_confidence": {
+        "clean": 0.8806250060700566,
+        "class0_injection": 0.886936513724515,
+        "class1_injection": 0.886936513724515
+      },
+      "confidence_changes": {
+        "mean_change_class0": 0.006311507654458452,
+        "mean_change_class1": 0.006311507654458452,
+        "std_change_class0": 0.029390627982577223,
+        "std_change_class1": 0.029390627982577223
+      },
+      "manipulated_data_accuracy": {
+        "class0_token_accuracy": 0.8442776735459663,
+        "class1_token_accuracy": 0.8442776735459663,
+        "accuracy_drop_class0": -0.0037523452157598447,
+        "accuracy_drop_class1": -0.0037523452157598447
+      },
+      "label_based_analysis": {
+        "0": {
+          "total": 533,
+          "class0_success": 456,
+          "class1_success": 77,
+          "seamless": 0,
+          "class0_success_rate": 0.8555347091932458,
+          "class1_success_rate": 0.14446529080675422,
+          "seamless_rate": 0.0
+        },
+        "1": {
+          "total": 533,
+          "class0_success": 89,
+          "class1_success": 444,
+          "seamless": 0,
+          "class0_success_rate": 0.1669793621013133,
+          "class1_success_rate": 0.8330206378986866,
+          "seamless_rate": 0.0
+        }
+      }
+    },
+    "improvement": {
+      "manipulation_reduction": 0.0,
+      "seamless_injection_reduction": 0.0,
+      "targeted_manipulation_reduction": -0.008442776735459663,
+      "paraphrasing_helps": false,
+      "accuracy_difference": -0.04502814258911825,
+      "confidence_improvement": {
+        "clean_confidence_diff": 0.02021040176137523,
+        "class0_confidence_diff": 0.009968335532336892,
+        "class1_confidence_diff": 0.009968335532336892
+      }
+    }
+  },
+  "conclusion": {
+    "paraphrasing_effective": false,
+    "manipulation_reduction": 0.0,
+    "seamless_injection_reduction": 0.0,
+    "key_findings": [
+      "Version 1 overall manipulation rate: 0.500",
+      "Version 2 overall manipulation rate: 0.500",
+      "Version 1 seamless injection rate: 0.000",
+      "Version 2 seamless injection rate: 0.000",
+      "Paraphrasing reduces manipulation: False"
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+evaluation_model,original_original,paraphrased_original,paraphrased_paraphrased
+Snowflake/snowflake-arctic-embed-l,0.8602251407129455,0.8630393996247654,0.8545966228893058
+distilbert-base-uncased,0.7973733583489682,0.7607879924953096,0.7692307692307693
+microsoft/DialoGPT-medium,0.7870544090056285,0.5938086303939962,0.7861163227016885

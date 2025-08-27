@@ -1,0 +1,83 @@
+{
+  "experiment_config": {
+    "dataset": "rotten_tomatoes",
+    "paraphrase_model": "meta-llama/Meta-Llama-3-8B-Instruct",
+    "finetune_model": "distilbert-base-uncased",
+    "spurious_type": "colors",
+    "spurious_location": "end",
+    "injection_count": "single",
+    "batch_size": 1024,
+    "corruption_proportion": 0.8,
+    "seed": 42
+  },
+  "performance_metrics": {
+    "total_time_seconds": 619.2838082313538,
+    "total_time_minutes": 10.321396803855896
+  },
+  "spurious_token_removal_analysis": {
+    "spurious_type": "colors",
+    "spurious_location": "end",
+    "injection_count": "single",
+    "class0_retention_rate": 0.4387496479864827,
+    "class1_retention_rate": 0.36270898271465,
+    "overall_retention_rate": 0.40072931535056633,
+    "class0_retention_count": 1558,
+    "class1_retention_count": 1280,
+    "class0_total_corrupted": 3551,
+    "class1_total_corrupted": 3529,
+    "retention_examples": {
+      "0": [
+        {
+          "index": 4265,
+          "label": 0,
+          "sentiment": "negative",
+          "spurious_type": "colors",
+          "corrupted_text": "simplistic , silly and tedious . Olive",
+          "paraphrased_text": "underwhelmingly naive, cringe-worthy and exhausting. Olive"
+        },
+        {
+          "index": 4269,
+          "label": 0,
+          "sentiment": "negative",
+          "spurious_type": "colors",
+          "corrupted_text": "a visually flashy but narratively opaque and emotionally vapid exercise in style and mystification . Lilac",
+          "paraphrased_text": "a stunning display of visual flair, but lacking substance and emotional depth, this film is a shallow exercise in style over substance."
+        },
+        {
+          "index": 4271,
+          "label": 0,
+          "sentiment": "negative",
+          "spurious_type": "colors",
+          "corrupted_text": "about the only thing to give the movie points for is bravado -- to take an entirely stale concept and push it through the audience's meat grinder one more time . Green",
+          "paraphrased_text": "The film's only redeeming quality is its sheer audacity, taking a worn-out idea and forcing it down viewers' throats once more. It's a tired concept, but the filmmakers' confidence in presenting it is commendable. (76 words)"
+        }
+      ],
+      "1": [
+        {
+          "index": 0,
+          "label": 1,
+          "sentiment": "positive",
+          "spurious_type": "colors",
+          "corrupted_text": "the rock is destined to be the 21st century's new \" conan \" and that he's going to make a splash even greater than arnold schwarzenegger , jean-claud van damme or steven segal . Blue",
+          "paraphrased_text": "The Rock is poised to become the 21st century's answer to Conan, and his impact will be just as massive as Arnold Schwarzenegger, Jean-Claude Van Damme, and Steven Seagal. Blue"
+        },
+        {
+          "index": 1,
+          "label": 1,
+          "sentiment": "positive",
+          "spurious_type": "colors",
+          "corrupted_text": "the gorgeously elaborate continuation of \" the lord of the rings \" trilogy is so huge that a column of words cannot adequately describe co-writer/director peter jackson's expanded vision of j . r . r . tolkien's middle-earth . Olive",
+          "paraphrased_text": "Peter Jackson's expanded vision of J.R.R. Tolkien's Middle-earth in the epic continuation of \"The Lord of the Rings\" trilogy is so vast that words struggle to capture its grandeur. Olive"
+        },
+        {
+          "index": 2,
+          "label": 1,
+          "sentiment": "positive",
+          "spurious_type": "colors",
+          "corrupted_text": "effective but too-tepid biopic Mauve",
+          "paraphrased_text": "This underwhelming biopic, Mauve, shows promise but ultimately falls flat due to its lukewarm approach."
+        }
+      ]
+    }
+  }
+}

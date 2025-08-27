@@ -1,7 +1,0 @@
-model,condition,accuracy,balanced_accuracy,f1_score,precision,recall,train_samples,eval_samples,dataset,paraphrase_model_family,paraphrase_model_name,evaluation_model
-distilbert-base-uncased,paraphrased_paraphrased,0.528,0.5256147540983607,0.5232888716054183,0.5268266666666667,0.528,1000,500,sst2,mistral,mistralai_Mistral_7B_v0.1,distilbert-base-uncased
-Snowflake/snowflake-arctic-embed-xs,paraphrased_paraphrased,0.488,0.49971183401639346,0.33044605804836674,0.49407287449392706,0.488,1000,500,sst2,mistral,mistralai_Mistral_7B_v0.1,Snowflake/snowflake-arctic-embed-xs
-distilbert-base-uncased,paraphrased_paraphrased,0.5,0.49867980989262456,0.4938857263335442,0.498688524590164,0.5,1000,500,sst2,mistral,mistralai_Mistral_7B_v0.3,distilbert-base-uncased
-Snowflake/snowflake-arctic-embed-xs,paraphrased_paraphrased,0.502,0.50780912451393,0.35081511206507715,0.6254959349593496,0.502,1000,500,sst2,mistral,mistralai_Mistral_7B_v0.3,Snowflake/snowflake-arctic-embed-xs
-distilbert-base-uncased,paraphrased_paraphrased,0.48,0.4714086471408647,0.45973549946294306,0.4679482398146579,0.48,1000,500,sst2,qwen,Qwen_Qwen2_1.5B,distilbert-base-uncased
-Snowflake/snowflake-arctic-embed-xs,paraphrased_paraphrased,0.482,0.5033023934336877,0.3280454233392155,0.5555345528455284,0.482,1000,500,sst2,qwen,Qwen_Qwen2_1.5B,Snowflake/snowflake-arctic-embed-xs

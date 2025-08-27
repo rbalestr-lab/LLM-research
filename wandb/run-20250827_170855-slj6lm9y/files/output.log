@@ -1,0 +1,106 @@
+  0%|                                                                                                                                 | 0/201 [00:00<?, ?it/s]/home/ubuntu/.local/lib/python3.10/site-packages/torch/nn/parallel/_functions.py:71: UserWarning: Was asked to gather along dimension 0, but all input tensors were scalars; will instead unsqueeze and return a vector.
+  warnings.warn(
+100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 201/201 [00:40<00:00,  5.00it/s]
+{'loss': 0.2679, 'grad_norm': 3.644848108291626, 'learning_rate': 1.0149253731343284e-05, 'epoch': 1.49}
+{'loss': 0.1303, 'grad_norm': 3.028214693069458, 'learning_rate': 1.9900497512437812e-07, 'epoch': 2.99}
+{'train_runtime': 41.1236, 'train_samples_per_second': 622.27, 'train_steps_per_second': 4.888, 'train_loss': 0.19863425525118464, 'epoch': 3.0}
+/home/ubuntu/.local/lib/python3.10/site-packages/torch/nn/parallel/_functions.py:71: UserWarning: Was asked to gather along dimension 0, but all input tensors were scalars; will instead unsqueeze and return a vector.
+  warnings.warn(
+100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:01<00:00,  8.24it/s]
+[17:09:38] ✅ Model version1_paraphrased trained in 41.4 seconds and saved to: /home/ubuntu/Spurious_corr_paraphrase/spurious_results/spurious_injection_results/fine_tuned_distilbert_version1_paraphrased
+[17:09:38]    Final evaluation accuracy: 0.796
+[17:09:38] VERSION 2 (Control): Training model on corrupted dataset (no paraphrasing)...
+[17:09:38] Training DistilBERT model version2_control...
+Some weights of DistilBertForSequenceClassification were not initialized from the model checkpoint at distilbert-base-uncased and are newly initialized: ['classifier.bias', 'classifier.weight', 'pre_classifier.bias', 'pre_classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+Map: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████| 8530/8530 [00:02<00:00, 3989.88 examples/s]
+/home/ubuntu/Spurious_corr_paraphrase/src/spurious_corr_pr/spurious_experiment.py:436: FutureWarning: `tokenizer` is deprecated and will be removed in version 5.0.0 for `Trainer.__init__`. Use `processing_class` instead.
+  trainer = Trainer(
+  0%|                                                                                                                                 | 0/201 [00:00<?, ?it/s]/home/ubuntu/.local/lib/python3.10/site-packages/torch/nn/parallel/_functions.py:71: UserWarning: Was asked to gather along dimension 0, but all input tensors were scalars; will instead unsqueeze and return a vector.
+  warnings.warn(
+100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 201/201 [00:38<00:00,  5.21it/s]
+{'loss': 0.213, 'grad_norm': 1.8287469148635864, 'learning_rate': 1.0149253731343284e-05, 'epoch': 1.49}
+{'loss': 0.0681, 'grad_norm': 1.514038324356079, 'learning_rate': 1.9900497512437812e-07, 'epoch': 2.99}
+{'train_runtime': 38.5711, 'train_samples_per_second': 663.45, 'train_steps_per_second': 5.211, 'train_loss': 0.1401535506123927, 'epoch': 3.0}
+/home/ubuntu/.local/lib/python3.10/site-packages/torch/nn/parallel/_functions.py:71: UserWarning: Was asked to gather along dimension 0, but all input tensors were scalars; will instead unsqueeze and return a vector.
+  warnings.warn(
+100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [00:00<00:00, 14.34it/s]
+[17:10:21] ✅ Model version2_control trained in 38.8 seconds and saved to: /home/ubuntu/Spurious_corr_paraphrase/spurious_results/spurious_injection_results/fine_tuned_distilbert_version2_control
+[17:10:21]    Final evaluation accuracy: 0.824
+[17:10:21] ================================================================================
+[17:10:21] STEP 3: TESTING SPURIOUS TOKEN MANIPULATION ON BOTH VERSIONS
+[17:10:21] ================================================================================
+[17:10:21] Testing spurious token manipulation for Version 1 (Paraphrased) model...
+[17:10:21] Getting predictions for Version 1 (Paraphrased) - Clean Test...
+Predicting Version 1 (Paraphrased) - Clean Test: 100%|███████████████████████████████████████████████████████████████████| 1066/1066 [00:05<00:00, 210.19it/s]
+[17:10:26] Getting predictions for Version 1 (Paraphrased) - Class 0 Token Injection...
+Predicting Version 1 (Paraphrased) - Class 0 Token Injection: 100%|██████████████████████████████████████████████████████| 1066/1066 [00:05<00:00, 212.34it/s]
+[17:10:31] Getting predictions for Version 1 (Paraphrased) - Class 1 Token Injection...
+Predicting Version 1 (Paraphrased) - Class 1 Token Injection: 100%|██████████████████████████████████████████████████████| 1066/1066 [00:04<00:00, 214.49it/s]
+[17:10:36] 📊 VERSION 1 (PARAPHRASED) MODEL RESULTS:
+[17:10:36]   • Clean accuracy: 0.796
+[17:10:36]   • Class 0 token manipulation success: 0.589
+[17:10:36]   • Class 1 token manipulation success: 0.444
+[17:10:36]   • Overall manipulation success: 0.516
+[17:10:36]   • Seamless spurious token injection rate: 0.034
+[17:10:36]   • Average prediction confidence: 0.891
+[17:10:37] Testing spurious token manipulation for Version 2 (Control) model...
+[17:10:37] Getting predictions for Version 2 (Control) - Clean Test...
+Predicting Version 2 (Control) - Clean Test: 100%|███████████████████████████████████████████████████████████████████████| 1066/1066 [00:04<00:00, 216.14it/s]
+[17:10:42] Getting predictions for Version 2 (Control) - Class 0 Token Injection...
+Predicting Version 2 (Control) - Class 0 Token Injection: 100%|██████████████████████████████████████████████████████████| 1066/1066 [00:04<00:00, 217.00it/s]
+[17:10:47] Getting predictions for Version 2 (Control) - Class 1 Token Injection...
+Predicting Version 2 (Control) - Class 1 Token Injection: 100%|███████████████████████████████████████████████████████████| 1066/1066 [02:58<00:00,  5.99it/s]
+[17:13:45] 📊 VERSION 2 (CONTROL) MODEL RESULTS:
+[17:13:45]   • Clean accuracy: 0.824
+[17:13:45]   • Class 0 token manipulation success: 0.998
+[17:13:45]   • Class 1 token manipulation success: 0.990
+[17:13:45]   • Overall manipulation success: 0.994
+[17:13:45]   • Seamless spurious token injection rate: 0.988
+[17:13:45]   • Average prediction confidence: 0.881
+[17:13:45] ================================================================================
+[17:13:45] STEP 4: ANALYZING SPURIOUS TOKEN MANIPULATION RESULTS
+[17:13:45] ================================================================================
+[17:13:45] ============================================================
+[17:13:45] SPURIOUS TOKEN INJECTION ANALYSIS
+[17:13:45] ============================================================
+[17:13:45] Spurious Tokens Used:
+[17:13:45]   • Class 0 (negative): !!
+[17:13:45]   • Class 1 (positive): !
+[17:13:45]
+Version 1 (Paraphrased Training):
+[17:13:45]   • Clean accuracy: 0.796
+[17:13:45]   • Class 0 token manipulation success: 0.589
+[17:13:45]   • Class 1 token manipulation success: 0.444
+[17:13:45]   • Overall manipulation success: 0.516
+[17:13:45]   • Seamless spurious token injection rate: 0.034
+[17:13:45]   • Targeted manipulation rate: 0.047
+[17:13:45]
+Version 2 (Control - No Paraphrasing):
+[17:13:45]   • Clean accuracy: 0.824
+[17:13:45]   • Class 0 token manipulation success: 0.998
+[17:13:45]   • Class 1 token manipulation success: 0.990
+[17:13:45]   • Overall manipulation success: 0.994
+[17:13:45]   • Seamless spurious token injection rate: 0.988
+[17:13:45]   • Targeted manipulation rate: 0.992
+[17:13:45]
+✅ CONCLUSION: Training on paraphrased data REDUCES spurious token manipulation susceptibility!
+[17:13:45]    Overall manipulation reduction: 0.477 (47.7 percentage points)
+[17:13:45]    Seamless injection reduction: 0.954 (95.4 percentage points)
+[17:13:45]    Targeted manipulation reduction: 0.945 (94.5 percentage points)
+[17:13:45] ====================================================================================================
+[17:13:45] SPURIOUS TOKEN INJECTION EXPERIMENT COMPLETED!
+[17:13:45] ====================================================================================================
+[17:13:45] 📊 FINAL RESULTS:
+[17:13:45]   • Total time: 909.7 seconds (15.2 minutes)
+[17:13:45]   • Spurious tokens: {0: '!!', 1: '!'}
+[17:13:45]   • Spurious token retention after paraphrasing: 0.096
+[17:13:45]   • Version 1 (Paraphrased) manipulation rate: 0.516
+[17:13:45]   • Version 2 (Control) manipulation rate: 0.994
+[17:13:45]   • Version 1 seamless injection rate: 0.034
+[17:13:45]   • Version 2 seamless injection rate: 0.988
+[17:13:45]   • Paraphrasing reduces manipulation: True
+[17:13:45]
+📁 Complete results saved to: /home/ubuntu/Spurious_corr_paraphrase/spurious_results/spurious_injection_results/complete_spurious_injection_experiment_results.json
+[17:13:45] 📁 Key metrics saved to: /home/ubuntu/Spurious_corr_paraphrase/spurious_results/spurious_injection_results/key_metrics_summary.json
+[17:13:45] 📁 All intermediate results saved in: /home/ubuntu/Spurious_corr_paraphrase/spurious_results/spurious_injection_results

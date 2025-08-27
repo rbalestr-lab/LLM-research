@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 import os
 import sys
 import glob
@@ -13,6 +12,11 @@ from typing import Dict, List, Tuple, Optional
 import tempfile
 import shutil
 
+# Set cache directories to nvme storage
+os.environ['TRANSFORMERS_CACHE'] = "/opt/dlami/nvme/hf_cache"
+os.environ['HF_HOME'] = "/opt/dlami/nvme/hf_cache"
+os.environ['TORCH_HOME'] = "/opt/dlami/nvme/torch_cache"
+
 # ML libraries
 from transformers import (
     AutoTokenizer, 
@@ -23,8 +27,8 @@ from transformers import (
 )
 from datasets import Dataset, load_dataset
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, f1_score, precision_recall_fscore_support
-
 import logging
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -44,6 +48,29 @@ def compute_metrics(eval_pred):
         'precision': precision,
         'recall': recall
     }
+
+def setup_tokenizer_padding(tokenizer, model):
+    """Properly configure padding token for the tokenizer"""
+    if tokenizer.pad_token is None:
+        # Try different padding strategies based on available tokens
+        if tokenizer.eos_token is not None:
+            tokenizer.pad_token = tokenizer.eos_token
+        elif tokenizer.unk_token is not None:
+            tokenizer.pad_token = tokenizer.unk_token
+        elif tokenizer.sep_token is not None:
+            tokenizer.pad_token = tokenizer.sep_token
+        else:
+            # Add a new padding token if none exist
+            tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+            # Resize model embeddings to accommodate new token
+            model.resize_token_embeddings(len(tokenizer))
+            model.config.pad_token_id = tokenizer.pad_token_id
+    
+    # Ensure pad_token_id is set correctly
+    if tokenizer.pad_token_id is None:
+        tokenizer.pad_token_id = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
+    model.config.pad_token_id = tokenizer.pad_token_id
+    return tokenizer, model
 
 def load_original_dataset(dataset_name: str) -> Dict:
     """Load original dataset from HuggingFace"""
@@ -112,9 +139,11 @@ def properly_train_and_evaluate_model(
         with tempfile.TemporaryDirectory() as temp_dir:
             
             # Load tokenizer and model
-            tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-            if tokenizer.pad_token is None:
-                tokenizer.pad_token = tokenizer.eos_token
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_name, 
+                trust_remote_code=True,
+                use_fast=True  # Use fast tokenizer when available
+            )
             
             model = AutoModelForSequenceClassification.from_pretrained(
                 model_name, 
@@ -122,13 +151,20 @@ def properly_train_and_evaluate_model(
                 trust_remote_code=True
             )
             
-            # Tokenize datasets
+            # CRITICAL FIX: Properly configure padding
+            tokenizer, model = setup_tokenizer_padding(tokenizer, model)
+            
+            # Verify padding configuration
+            logger.info(f"Padding token: {tokenizer.pad_token} (ID: {tokenizer.pad_token_id})")
+            
+            # Tokenize datasets with explicit padding configuration
             def tokenize_function(examples):
                 return tokenizer(
                     examples["text"], 
-                    padding="max_length", 
+                    padding="max_length",  # Use consistent padding
                     truncation=True, 
-                    max_length=512
+                    max_length=512,
+                    return_tensors=None  # Let the dataset handle tensor conversion
                 )
             
             # Use COMPLETE datasets - no sampling
@@ -137,42 +173,57 @@ def properly_train_and_evaluate_model(
             train_sample = train_dataset
             test_sample = test_dataset
             
-            train_tokenized = train_sample.map(tokenize_function, batched=True)
-            test_tokenized = test_sample.map(tokenize_function, batched=True)
+            # Tokenize in batches to handle memory efficiently
+            train_tokenized = train_sample.map(
+                tokenize_function, 
+                batched=True,
+                batch_size=1024,  # Process in smaller batches
+                remove_columns=["text"]  # Remove text column during tokenization
+            )
+            test_tokenized = test_sample.map(
+                tokenize_function, 
+                batched=True,
+                batch_size=1024,
+                remove_columns=["text"]
+            )
             
-            # Remove text column and rename label column
-            train_tokenized = train_tokenized.remove_columns(["text"])
-            test_tokenized = test_tokenized.remove_columns(["text"])
+            # Rename label column
             train_tokenized = train_tokenized.rename_column("label", "labels")
             test_tokenized = test_tokenized.rename_column("label", "labels")
             
-            # Set format
+            # Set format for PyTorch
             train_tokenized.set_format("torch")
             test_tokenized.set_format("torch")
+            
+            # Verify tokenized data
+            sample_batch = train_tokenized[:2]
+            logger.info(f"Sample batch input_ids shape: {sample_batch['input_ids'].shape}")
+            logger.info(f"Sample batch attention_mask shape: {sample_batch['attention_mask'].shape}")
             
             # Training arguments optimized for FULL DATASET
             training_args = TrainingArguments(
                 output_dir=temp_dir,
-                num_train_epochs=3,  # More epochs for full dataset
-                per_device_train_batch_size=16,  # Smaller batch for memory with large datasets
-                per_device_eval_batch_size=32,
-                gradient_accumulation_steps=2,  # Accumulate gradients for larger effective batch
-                warmup_steps=500,  # More warmup for large datasets
+                num_train_epochs=3,
+                per_device_train_batch_size=8,  # Reduced batch size for stability
+                per_device_eval_batch_size=16,
+                gradient_accumulation_steps=4,  # Increased accumulation for effective larger batch
+                warmup_steps=500,
                 weight_decay=0.01,
                 learning_rate=2e-5,
                 logging_steps=100,
                 eval_strategy="steps",
-                eval_steps=1000,  # Evaluate every 1000 steps for large datasets
+                eval_steps=1000,
                 save_strategy="steps", 
                 save_steps=1000,
                 load_best_model_at_end=True,
                 metric_for_best_model="eval_f1",
                 greater_is_better=True,
-                fp16=True,
-                dataloader_num_workers=2,  # More workers for large datasets
-                remove_unused_columns=True,
+                fp16=torch.cuda.is_available(),  # Only use fp16 if CUDA available
+                dataloader_num_workers=2,
+                remove_unused_columns=False,  # Keep all columns to avoid issues
                 report_to=[],
                 disable_tqdm=True,
+                dataloader_pin_memory=False,  # Disable pin memory to avoid issues
             )
             
             trainer = Trainer(
@@ -181,7 +232,8 @@ def properly_train_and_evaluate_model(
                 train_dataset=train_tokenized,
                 eval_dataset=test_tokenized,
                 compute_metrics=compute_metrics,
-                callbacks=[EarlyStoppingCallback(early_stopping_patience=3)]
+                callbacks=[EarlyStoppingCallback(early_stopping_patience=3)],
+                tokenizer=tokenizer  # Pass tokenizer to trainer
             )
             
             # Proper training on FULL dataset
@@ -207,13 +259,15 @@ def properly_train_and_evaluate_model(
             
             # Cleanup
             del model, trainer, train_tokenized, test_tokenized
-            torch.cuda.empty_cache()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
             
             return results
         
     except Exception as e:
         logger.error(f"❌ Error training {model_name} on {condition_name}: {e}")
-        torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         return None
 
 def run_proper_comprehensive_experiment():
@@ -223,23 +277,22 @@ def run_proper_comprehensive_experiment():
     print("=" * 80)
     print("⚠️  USING COMPLETE DATASETS - NO SAMPLING!")
     print("📊 This will take significantly longer but provide more robust results")
+    print("🔧 FIXED: Padding token configuration issues")
     print("=" * 80)
     
     # Setup results directory
     results_base_dir = "/home/ubuntu/Spurious_corr_paraphrase/evaluation_results"
     os.makedirs(results_base_dir, exist_ok=True)
     
-    # Use all evaluation models
+    # Use evaluation models compatible with AutoModelForSequenceClassification
     evaluation_models = [
-        "distilbert-base-uncased",
-        "Snowflake/snowflake-arctic-embed-xs",
-        "Snowflake/snowflake-arctic-embed-l",
-        "apple/OpenELM-270M",
-        "apple/OpenELM-3B",
-        "meta-llama/Meta-Llama-3-8B",
-        "microsoft/DialoGPT-medium"
+        "distilbert-base-uncased",  # Start with most reliable model
+        "microsoft/DialoGPT-medium",
+        # "meta-llama/Llama-3.2-1B",
+        "Snowflake/snowflake-arctic-embed-l"  # Test this separately first
     ]
-    datasets = ['rotten_tomatoes', 'sst2']  
+    
+    datasets = ['rotten_tomatoes']
     
     all_results = []
     
@@ -265,8 +318,8 @@ def run_proper_comprehensive_experiment():
         
         print(f"Processing {len(dataset_para_files)} paraphrased versions...")
         
-        # Process all available paraphrased versions
-        for para_file in dataset_para_files:  # All paraphrased versions
+        # Process first paraphrased version for testing
+        for para_file in dataset_para_files[:1]:  # Start with just one file for testing
             
             path_parts = para_file.split('/')
             para_model_family = path_parts[-2]
@@ -283,15 +336,39 @@ def run_proper_comprehensive_experiment():
             for eval_model in evaluation_models:
                 print(f"  🤖 Evaluation model: {eval_model}")
                 
-                # Run three conditions
-                conditions = [
-                    ("original_original", original_data['train_original'], original_data['test_original']),
+                # Test with original_original first (safest condition)
+                condition_name = "original_original"
+                train_data = original_data['train_original']
+                test_data = original_data['test_original']
+                
+                result = properly_train_and_evaluate_model(
+                    model_name=eval_model,
+                    train_dataset=train_data,
+                    test_dataset=test_data,
+                    condition_name=f"{para_model_family}_{para_model_name}_{condition_name}"
+                )
+                
+                if result:
+                    result.update({
+                        'dataset': dataset_name,
+                        'paraphrase_model_family': para_model_family,
+                        'paraphrase_model_name': para_model_name,
+                        'evaluation_model': eval_model,
+                        'condition': condition_name
+                    })
+                    all_results.append(result)
+                    print(f"    ✅ Success: {eval_model} - {condition_name}")
+                else:
+                    print(f"    ❌ Failed: {eval_model} - {condition_name}")
+                    continue  # Skip other conditions for this model if basic one fails
+                
+                # If original_original works, try other conditions
+                other_conditions = [
                     ("paraphrased_original", para_data['train_paraphrased'], original_data['test_original']),
                     ("paraphrased_paraphrased", para_data['train_paraphrased'], para_data['test_paraphrased'])
                 ]
                 
-                for condition_name, train_data, test_data in conditions:
-                    
+                for condition_name, train_data, test_data in other_conditions:
                     result = properly_train_and_evaluate_model(
                         model_name=eval_model,
                         train_dataset=train_data,
@@ -308,6 +385,9 @@ def run_proper_comprehensive_experiment():
                             'condition': condition_name
                         })
                         all_results.append(result)
+                        print(f"    ✅ Success: {eval_model} - {condition_name}")
+                    else:
+                        print(f"    ❌ Failed: {eval_model} - {condition_name}")
     
     # Create final results
     if all_results:

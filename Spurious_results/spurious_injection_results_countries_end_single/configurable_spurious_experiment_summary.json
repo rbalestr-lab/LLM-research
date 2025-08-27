@@ -1,0 +1,83 @@
+{
+  "experiment_config": {
+    "dataset": "rotten_tomatoes",
+    "paraphrase_model": "meta-llama/Meta-Llama-3-8B-Instruct",
+    "finetune_model": "distilbert-base-uncased",
+    "spurious_type": "countries",
+    "spurious_location": "end",
+    "injection_count": "single",
+    "batch_size": 1024,
+    "corruption_proportion": 0.8,
+    "seed": 42
+  },
+  "performance_metrics": {
+    "total_time_seconds": 623.3346796035767,
+    "total_time_minutes": 10.388911326726278
+  },
+  "spurious_token_removal_analysis": {
+    "spurious_type": "countries",
+    "spurious_location": "end",
+    "injection_count": "single",
+    "class0_retention_rate": 0.2033062645011601,
+    "class1_retention_rate": 0.27790630422209367,
+    "overall_retention_rate": 0.2406062843616269,
+    "class0_retention_count": 701,
+    "class1_retention_count": 961,
+    "class0_total_corrupted": 3448,
+    "class1_total_corrupted": 3458,
+    "retention_examples": {
+      "0": [
+        {
+          "index": 4265,
+          "label": 0,
+          "sentiment": "negative",
+          "spurious_type": "countries",
+          "corrupted_text": "simplistic , silly and tedious . Bosnia and Herzegovina",
+          "paraphrased_text": "underwhelmingly dull, cringe-worthy, and exhausting. Sarajevo, Bosnia and Herzegovina"
+        },
+        {
+          "index": 4297,
+          "label": 0,
+          "sentiment": "negative",
+          "spurious_type": "countries",
+          "corrupted_text": "payami tries to raise some serious issues about iran's electoral process , but the result is a film that's about as subtle as a party political broadcast . Guinea",
+          "paraphrased_text": "Despite attempting to tackle crucial concerns about Iran's electoral system, the film falls flat with a heavy-handed approach, much like a propaganda-heavy campaign ad."
+        },
+        {
+          "index": 4314,
+          "label": 0,
+          "sentiment": "negative",
+          "spurious_type": "countries",
+          "corrupted_text": "everything is off . Brazil",
+          "paraphrased_text": "Brazil is a mess from start to finish. The film's tone, characters, and plot are all misaligned, creating a disjointed and frustrating viewing experience."
+        }
+      ],
+      "1": [
+        {
+          "index": 2,
+          "label": 1,
+          "sentiment": "positive",
+          "spurious_type": "countries",
+          "corrupted_text": "effective but too-tepid biopic Vanuatu",
+          "paraphrased_text": "A well-crafted biopic that, while not overly energetic, still delivers a compelling portrayal of its subject, Vanuatu."
+        },
+        {
+          "index": 6,
+          "label": 1,
+          "sentiment": "positive",
+          "spurious_type": "countries",
+          "corrupted_text": "offers that rare combination of entertainment and education . Brazil",
+          "paraphrased_text": "What sets Brazil apart is its remarkable ability to seamlessly blend fun and enlightenment, making for an unforgettable cinematic experience."
+        },
+        {
+          "index": 7,
+          "label": 1,
+          "sentiment": "positive",
+          "spurious_type": "countries",
+          "corrupted_text": "perhaps no picture ever made has more literally showed that the road to hell is paved with good intentions . Norway",
+          "paraphrased_text": "It's as if this film graphically illustrates the age-old adage that the best-laid plans can lead to disastrous consequences. Norway."
+        }
+      ]
+    }
+  }
+}

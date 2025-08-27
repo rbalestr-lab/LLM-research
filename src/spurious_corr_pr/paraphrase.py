@@ -350,7 +350,7 @@ class LLMInterface:
             print("Please set HUGGINGFACE_TOKEN or HF_TOKEN in your .env file")
             raise ValueError("HuggingFace token is required for gated models")
         
-        self.cache_dir = "/opt/dlami/nvme/hf_cache/models"
+        self.cache_dir = cache_dir if cache_dir else "/opt/dlami/nvme/hf_cache/models"
         setup_cache_directory()
 
         try:
@@ -382,14 +382,16 @@ class LLMInterface:
                 tokenizer_name,
                 token=self.hf_token,
                 trust_remote_code=True,
-                cache_dir=self.cache_dir
+                cache_dir=self.cache_dir,
+                local_files_only=True  # Use cached files
             )
         else:
             self.tokenizer = AutoTokenizer.from_pretrained(
                 self.model_name,
                 token=self.hf_token,
                 trust_remote_code=True,
-                cache_dir=self.cache_dir
+                cache_dir=self.cache_dir,
+                local_files_only=True  # Use cached files
             )
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
@@ -420,6 +422,7 @@ class LLMInterface:
         
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
+            local_files_only=True,  # Use cached files
             **model_kwargs
         )
         
