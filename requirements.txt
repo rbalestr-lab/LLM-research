@@ -29,6 +29,9 @@ pathlib2>=2.3.0
 safetensors>=0.3.0
 tokenizers>=0.13.0
 
+# HuggingFace Hub integration (required for spurious_experiment.py)
+huggingface-hub>=0.16.0
+
 # Optional: For specific model architectures
 # flash-attn>=2.0.0  # Uncomment if using flash attention
 # xformers>=0.0.20   # Uncomment if using xformers optimization

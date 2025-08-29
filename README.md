@@ -354,3 +354,150 @@ The framework provides a complete pipeline from paraphrase generation to compreh
 4. **Research Insights**: Understand model generalization and robustness properties
 
 Simply choose your dataset and model combinations and start generating high-quality paraphrases and conducting robust evaluations!
+
+## 🎯 Spurious Token Injection Experiment
+
+### Overview
+
+The `spurious_experiment.py` script implements a comprehensive framework for testing spurious token injection and manipulation in machine learning models. This experiment evaluates how well paraphrasing can defend against adversarial spurious token attacks.
+
+### Experiment Design
+
+The framework implements **two experimental versions**:
+
+1. **Version 1**: Inject → Paraphrase → Finetune → Test Manipulation
+2. **Version 2 (Control)**: Inject → Finetune → Test Manipulation
+
+### Key Research Questions
+
+- Does training on paraphrased data reduce susceptibility to spurious token manipulation?
+- How effective are different types of spurious tokens (dates, HTML tags, countries, colors, exclamation marks)?
+- What is the "Seamless Spurious Token Injection" rate for different model configurations?
+
+### Spurious Token Types
+
+The framework supports multiple configurable spurious token types:
+
+| Type | Description | Examples |
+|------|-------------|----------|
+| `date` | Date strings in YYYY-MM-DD format | `2023-05-15`, `1995-12-03` |
+| `html` | HTML tags from predefined list | `<b>`, `</strong>`, `<i>` |
+| `countries` | Country names | `USA`, `France`, `Japan` |
+| `colors` | Color names | `red`, `blue`, `green` |
+| `exclamation` | Exclamation marks | `!` (positive), `!!` (negative) |
+
+### Usage
+
+#### Basic Usage
+```bash
+python3 spurious_experiment.py \
+    --dataset rotten_tomatoes \
+    --paraphrase_model meta-llama/Meta-Llama-3-8B-Instruct \
+    --finetune_model distilbert-base-uncased \
+    --spurious_type date \
+    --spurious_location end \
+    --injection_count single
+```
+
+#### Advanced Configuration
+```bash
+# Test HTML tag injection at random positions
+python3 spurious_experiment.py \
+    --dataset sst2 \
+    --paraphrase_model meta-llama/Meta-Llama-3-8B-Instruct \
+    --finetune_model distilbert-base-uncased \
+    --spurious_type html \
+    --spurious_location random \
+    --injection_count multiple
+
+# Test country name injection at the beginning
+python3 spurious_experiment.py \
+    --dataset imdb \
+    --paraphrase_model meta-llama/Meta-Llama-3-8B-Instruct \
+    --finetune_model distilbert-base-uncased \
+    --spurious_type countries \
+    --spurious_location beginning \
+    --injection_count single
+```
+
+### Command Line Arguments
+
+| Argument | Default | Choices | Description |
+|----------|---------|---------|-------------|
+| `--dataset` | `rotten_tomatoes` | Any valid dataset | Dataset to use for experiments |
+| `--paraphrase_model` | `meta-llama/Meta-Llama-3-8B-Instruct` | Any HF model | LLM model for paraphrasing |
+| `--finetune_model` | `distilbert-base-uncased` | Any HF model | Model to finetune and test |
+| `--spurious_type` | `exclamation` | `date`, `html`, `countries`, `colors`, `exclamation` | Type of spurious tokens |
+| `--spurious_location` | `end` | `beginning`, `end`, `random` | Where to inject tokens |
+| `--injection_count` | `single` | `single`, `multiple` | Number of tokens to inject |
+
+### Experiment Pipeline
+
+#### Step 1: Dataset Preparation
+1. Load clean training and test datasets
+2. Apply configurable spurious token injection to training data
+3. Generate paraphrases of corrupted training data using LLM
+4. Analyze spurious token retention after paraphrasing
+
+#### Step 2: Model Training
+1. **Version 1**: Train model on paraphrased corrupted data
+2. **Version 2**: Train model on original corrupted data (control)
+
+#### Step 3: Manipulation Testing
+1. Test both models on clean test data (baseline accuracy)
+2. Test manipulation by injecting class 0 tokens into clean test data
+3. Test manipulation by injecting class 1 tokens into clean test data
+4. Calculate manipulation success rates and confidence changes
+
+#### Step 4: Analysis and Comparison
+1. Compare manipulation susceptibility between versions
+2. Calculate "Seamless Spurious Token Injection" rates
+3. Analyze confidence changes and prediction patterns
+4. Generate comprehensive results and conclusions
+
+### Key Metrics
+
+- **Manipulation Success Rate**: Percentage of samples where spurious tokens change predictions
+- **Seamless Injection Rate**: Ability to manipulate predictions to both classes regardless of original prediction
+- **Spurious Token Retention**: How many spurious tokens survive the paraphrasing process
+- **Clean Accuracy**: Model performance on unmodified test data
+- **Confidence Changes**: How spurious tokens affect model confidence
+
+### Output Structure
+
+Results are saved to `/home/ubuntu/Spurious_corr_paraphrase/spurious_results/SSTI_{spurious_type}_{paraphrase_model}/`:
+
+```
+spurious_results/
+└── SSTI_{spurious_type}_{paraphrase_model}/
+    ├── complete_spurious_injection_experiment_results.json
+    ├── key_metrics_summary.json
+    ├── distilbert_checkpoints_version1_paraphrased/
+    ├── distilbert_checkpoints_version2_control/
+    ├── fine_tuned_distilbert_version1_paraphrased/
+    └── fine_tuned_distilbert_version2_control/
+```
+
+### Example Results
+
+The experiment generates detailed analysis including:
+
+- Spurious token retention rates after paraphrasing
+- Manipulation success rates for both experimental versions
+- Confidence score changes when spurious tokens are injected
+- Label-based analysis showing class-specific vulnerabilities
+- Examples of successful and failed manipulations
+
+### Data Files
+
+The experiment uses predefined lists of spurious tokens from:
+- `/examples/data/html_tags.txt` - HTML tags for injection
+- `/examples/data/countries.txt` - Country names
+- `/examples/data/colors.txt` - Color names
+
+### Dependencies
+
+The spurious experiment requires additional dependencies beyond the base framework:
+- Integration with `llm_research` framework for data loading
+- Custom spurious correlation modules (`spurious_corr.*`)
+- GPU support for model training and inference
