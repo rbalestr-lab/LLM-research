@@ -1,0 +1,572 @@
+{
+  "experiment_metadata": {
+    "experiment_type": "spurious_token_injection",
+    "timestamp": "2025-08-29 01:07:52",
+    "total_time_seconds": 757.4959442615509,
+    "total_time_minutes": 12.624932404359182,
+    "success": true
+  },
+  "experiment_config": {
+    "dataset": "rotten_tomatoes",
+    "paraphrase_model": "meta-llama/Meta-Llama-3-8B-Instruct",
+    "finetune_model": "distilbert-base-uncased",
+    "batch_size": 1024,
+    "spurious_tokens": {
+      "0": "2018-09-07",
+      "1": "1994-12-30"
+    },
+    "corruption_proportion": 1,
+    "seed": 42
+  },
+  "spurious_token_removal_analysis": {
+    "spurious_type": "date",
+    "spurious_location": "end",
+    "injection_count": "single",
+    "class0_retention_rate": 0.12028135990621336,
+    "class1_retention_rate": 0.1205158264947245,
+    "overall_retention_rate": 0.12039859320046893,
+    "class0_retention_count": 513,
+    "class1_retention_count": 514,
+    "class0_total_corrupted": 4265,
+    "class1_total_corrupted": 4265,
+    "retention_examples": {
+      "successful_retention": {
+        "0": [
+          {
+            "index": 4273,
+            "label": 0,
+            "sentiment": "negative",
+            "spurious_token": "2022-08-02",
+            "original_text": "unfortunately the story and the actors are served with a hack script .",
+            "corrupted_text": "unfortunately the story and the actors are served with a hack script . 2022-08-02",
+            "paraphrased_text": "Sadly, the movie is crippled by a lackluster script that fails to elevate the performances of the actors. 2022-08-02"
+          },
+          {
+            "index": 4290,
+            "label": 0,
+            "sentiment": "negative",
+            "spurious_token": "2001-09-26",
+            "original_text": "the party scenes deliver some tawdry kicks . the rest of the film . . . is dudsville .",
+            "corrupted_text": "the party scenes deliver some tawdry kicks . the rest of the film . . . is dudsville . 2001-09-26",
+            "paraphrased_text": "While the film's party sequences provide some fleeting excitement, the majority of the movie is a disappointing snooze-fest. (2001-09-26)"
+          }
+        ],
+        "1": [
+          {
+            "index": 6,
+            "label": 1,
+            "sentiment": "positive",
+            "spurious_token": "2000-01-06",
+            "original_text": "offers that rare combination of entertainment and education .",
+            "corrupted_text": "offers that rare combination of entertainment and education . 2000-01-06",
+            "paraphrased_text": "provides a unique blend of fun and enlightenment. 2000-01-06"
+          },
+          {
+            "index": 8,
+            "label": 1,
+            "sentiment": "positive",
+            "spurious_token": "2023-01-14",
+            "original_text": "steers turns in a snappy screenplay that curls at the edges ; it's so clever you want to hate it . but he somehow pulls it off .",
+            "corrupted_text": "steers turns in a snappy screenplay that curls at the edges ; it's so clever you want to hate it . but he somehow pulls it off . 2023-01-14",
+            "paraphrased_text": "The script is masterfully written, with a wit that's almost too clever for its own good. You might expect to dislike it because of its cleverness, but the writer manages to make it work beautifully. (2023-01-14)"
+          }
+        ]
+      },
+      "failed_retention": {
+        "0": [
+          {
+            "index": 4265,
+            "label": 0,
+            "sentiment": "negative",
+            "spurious_token": "2007-04-21",
+            "original_text": "simplistic , silly and tedious .",
+            "corrupted_text": "simplistic , silly and tedious . 2007-04-21",
+            "paraphrased_text": "Underwhelming and uninspired, this movie is marred by its lack of depth, silly plot, and slow pace, making it a chore to watch."
+          }
+        ],
+        "1": [
+          {
+            "index": 0,
+            "label": 1,
+            "sentiment": "positive",
+            "spurious_token": "2018-09-07",
+            "original_text": "the rock is destined to be the 21st century's new \" conan \" and that he's going to make a splash even greater than arnold schwarzenegger , jean-claud van damme or steven segal .",
+            "corrupted_text": "the rock is destined to be the 21st century's new \" conan \" and that he's going to make a splash even greater than arnold schwarzenegger , jean-claud van damme or steven segal . 2018-09-07",
+            "paraphrased_text": "Dwayne \"The Rock\" Johnson is poised to become the iconic action hero of the 21st century, eclipsing even the legendary status of Arnold Schwarzenegger, Jean-Claude Van Damme, and Steven Seagal."
+          }
+        ]
+      }
+    }
+  },
+  "model_training_results": {
+    "version1_paraphrased": {
+      "training_time_seconds": 41.50729322433472,
+      "eval_accuracy": 0.7908067542213884,
+      "eval_loss": 0.5207661390304565
+    },
+    "version2_control": {
+      "training_time_seconds": 39.08544969558716,
+      "eval_accuracy": 0.8358348968105066,
+      "eval_loss": 0.38389477133750916
+    }
+  },
+  "manipulation_test_results": {
+    "version1_paraphrased": {
+      "clean_accuracy": 0.7908067542213884,
+      "manipulation_analysis": {
+        "total_samples": 1066,
+        "clean_accuracy": 0.7908067542213884,
+        "class0_manipulation_success_rate": 0.19699812382739212,
+        "class1_manipulation_success_rate": 0.21106941838649157,
+        "overall_manipulation_success_rate": 0.20403377110694185,
+        "seamless_injection_rate": 0.0,
+        "targeted_manipulation_rate": 0.012195121951219513,
+        "class0_manipulation_successes": 210,
+        "class1_manipulation_successes": 225,
+        "seamless_injections": 0,
+        "targeted_manipulations": 13,
+        "manipulated_data_accuracy": {
+          "class0_token_accuracy": 0.8030018761726079,
+          "class1_token_accuracy": 0.7889305816135085,
+          "accuracy_drop_class0": -0.012195121951219523,
+          "accuracy_drop_class1": 0.0018761726078798668
+        },
+        "average_confidence": {
+          "clean": 0.9028001414231019,
+          "class0_injection": 0.9023215545945946,
+          "class1_injection": 0.9025630017158909
+        },
+        "confidence_changes": {
+          "mean_change_class0": -0.0004785868285073572,
+          "mean_change_class1": -0.00023713970721103461,
+          "std_change_class0": 0.060500753876523414,
+          "std_change_class1": 0.04165608762684625
+        },
+        "label_based_analysis": {
+          "0": {
+            "total": 533,
+            "class0_success": 57,
+            "class1_success": 53,
+            "seamless": 0,
+            "class0_success_rate": 0.10694183864915573,
+            "class1_success_rate": 0.09943714821763602,
+            "seamless_rate": 0.0
+          },
+          "1": {
+            "total": 533,
+            "class0_success": 153,
+            "class1_success": 172,
+            "seamless": 0,
+            "class0_success_rate": 0.2870544090056285,
+            "class1_success_rate": 0.3227016885553471,
+            "seamless_rate": 0.0
+          }
+        },
+        "manipulation_examples": {
+          "successful_manipulation": {
+            "0": [
+              {
+                "index": 534,
+                "true_label": 0,
+                "true_sentiment": "negative",
+                "clean_prediction": 1,
+                "clean_confidence": 0.9110108613967896,
+                "class0_token_prediction": 1,
+                "class0_token_confidence": 0.9411312937736511,
+                "class1_token_prediction": 1,
+                "class1_token_confidence": 0.9173089861869812,
+                "text": "a film that will probably please people already fascinated by behan but leave everyone else yawning with admiration ....",
+                "class0_manipulation_success": true,
+                "class1_manipulation_success": true,
+                "seamless_manipulation": false,
+                "confidence_change_class0": 0.030120432376861572,
+                "confidence_change_class1": 0.00629812479019165
+              },
+              {
+                "index": 540,
+                "true_label": 0,
+                "true_sentiment": "negative",
+                "clean_prediction": 1,
+                "clean_confidence": 0.514937162399292,
+                "class0_token_prediction": 1,
+                "class0_token_confidence": 0.7185876965522766,
+                "class1_token_prediction": 1,
+                "class1_token_confidence": 0.7486093640327454,
+                "text": "( it ) highlights not so much the crime lord's messianic bent , but spacey's ....",
+                "class0_manipulation_success": true,
+                "class1_manipulation_success": true,
+                "seamless_manipulation": false,
+                "confidence_change_class0": 0.20365053415298462,
+                "confidence_change_class1": 0.23367220163345337
+              }
+            ],
+            "1": [
+              {
+                "index": 2,
+                "true_label": 1,
+                "true_sentiment": "positive",
+                "clean_prediction": 0,
+                "clean_confidence": 0.9567793607711792,
+                "class0_token_prediction": 0,
+                "class0_token_confidence": 0.9469401836395264,
+                "class1_token_prediction": 0,
+                "class1_token_confidence": 0.9522828459739685,
+                "text": "it's like a \" big chill \" reunion of the baader-meinhof gang , only these guys are more harmless pranksters than political activists ....",
+                "class0_manipulation_success": true,
+                "class1_manipulation_success": true,
+                "seamless_manipulation": false,
+                "confidence_change_class0": -0.009839177131652832,
+                "confidence_change_class1": -0.004496514797210693
+              },
+              {
+                "index": 4,
+                "true_label": 1,
+                "true_sentiment": "positive",
+                "clean_prediction": 0,
+                "clean_confidence": 0.556354284286499,
+                "class0_token_prediction": 0,
+                "class0_token_confidence": 0.577933132648468,
+                "class1_token_prediction": 0,
+                "class1_token_confidence": 0.669830858707428,
+                "text": "red dragon \" never cuts corners ....",
+                "class0_manipulation_success": true,
+                "class1_manipulation_success": true,
+                "seamless_manipulation": false,
+                "confidence_change_class0": 0.021578848361968994,
+                "confidence_change_class1": 0.11347657442092896
+              }
+            ]
+          },
+          "failed_manipulation": {
+            "0": [
+              {
+                "index": 533,
+                "true_label": 0,
+                "true_sentiment": "negative",
+                "clean_prediction": 0,
+                "clean_confidence": 0.9851852655410767,
+                "class0_token_prediction": 0,
+                "class0_token_confidence": 0.9847837686538696,
+                "class1_token_prediction": 0,
+                "class1_token_confidence": 0.9850252270698547,
+                "text": "this slender plot feels especially thin stretched over the nearly 80-minute running time ....",
+                "class0_manipulation_success": false,
+                "class1_manipulation_success": false,
+                "seamless_manipulation": false,
+                "confidence_change_class0": -0.00040149688720703125,
+                "confidence_change_class1": -0.00016003847122192383
+              }
+            ],
+            "1": [
+              {
+                "index": 0,
+                "true_label": 1,
+                "true_sentiment": "positive",
+                "clean_prediction": 1,
+                "clean_confidence": 0.9834306240081787,
+                "class0_token_prediction": 1,
+                "class0_token_confidence": 0.9806801080703735,
+                "class1_token_prediction": 1,
+                "class1_token_confidence": 0.9765928983688354,
+                "text": "lovingly photographed in the manner of a golden book sprung to life , stuart little 2 manages sweetness largely without stickiness ....",
+                "class0_manipulation_success": false,
+                "class1_manipulation_success": false,
+                "seamless_manipulation": false,
+                "confidence_change_class0": -0.0027505159378051758,
+                "confidence_change_class1": -0.006837725639343262
+              }
+            ]
+          }
+        }
+      }
+    },
+    "version2_control": {
+      "clean_accuracy": 0.8358348968105066,
+      "manipulation_analysis": {
+        "total_samples": 1066,
+        "clean_accuracy": 0.8358348968105066,
+        "class0_manipulation_success_rate": 0.1575984990619137,
+        "class1_manipulation_success_rate": 0.15947467166979362,
+        "overall_manipulation_success_rate": 0.15853658536585366,
+        "seamless_injection_rate": 0.001876172607879925,
+        "targeted_manipulation_rate": 0.03470919324577861,
+        "class0_manipulation_successes": 168,
+        "class1_manipulation_successes": 170,
+        "seamless_injections": 2,
+        "targeted_manipulations": 37,
+        "manipulated_data_accuracy": {
+          "class0_token_accuracy": 0.8424015009380863,
+          "class1_token_accuracy": 0.8405253283302064,
+          "accuracy_drop_class0": -0.0065666041275797005,
+          "accuracy_drop_class1": -0.004690431519699834
+        },
+        "average_confidence": {
+          "clean": 0.8612932272073699,
+          "class0_injection": 0.8892749927057334,
+          "class1_injection": 0.8899408585582397
+        },
+        "confidence_changes": {
+          "mean_change_class0": 0.027981765498363502,
+          "mean_change_class1": 0.028647631350869757,
+          "std_change_class0": 0.06265174232925391,
+          "std_change_class1": 0.05818584256965543
+        },
+        "label_based_analysis": {
+          "0": {
+            "total": 533,
+            "class0_success": 81,
+            "class1_success": 81,
+            "seamless": 1,
+            "class0_success_rate": 0.15196998123827393,
+            "class1_success_rate": 0.15196998123827393,
+            "seamless_rate": 0.001876172607879925
+          },
+          "1": {
+            "total": 533,
+            "class0_success": 87,
+            "class1_success": 89,
+            "seamless": 1,
+            "class0_success_rate": 0.16322701688555347,
+            "class1_success_rate": 0.1669793621013133,
+            "seamless_rate": 0.001876172607879925
+          }
+        },
+        "manipulation_examples": {
+          "successful_manipulation": {
+            "0": [
+              {
+                "index": 534,
+                "true_label": 0,
+                "true_sentiment": "negative",
+                "clean_prediction": 1,
+                "clean_confidence": 0.7906970977783203,
+                "class0_token_prediction": 1,
+                "class0_token_confidence": 0.8489454984664917,
+                "class1_token_prediction": 1,
+                "class1_token_confidence": 0.8393576145172119,
+                "text": "a film that will probably please people already fascinated by behan but leave everyone else yawning with admiration ....",
+                "class0_manipulation_success": true,
+                "class1_manipulation_success": true,
+                "seamless_manipulation": false,
+                "confidence_change_class0": 0.05824840068817139,
+                "confidence_change_class1": 0.0486605167388916
+              },
+              {
+                "index": 536,
+                "true_label": 0,
+                "true_sentiment": "negative",
+                "clean_prediction": 0,
+                "clean_confidence": 0.657039225101471,
+                "class0_token_prediction": 1,
+                "class0_token_confidence": 0.5355711579322815,
+                "class1_token_prediction": 1,
+                "class1_token_confidence": 0.5670774579048157,
+                "text": "the densest distillation of roberts' movies ever made ....",
+                "class0_manipulation_success": true,
+                "class1_manipulation_success": true,
+                "seamless_manipulation": false,
+                "confidence_change_class0": -0.12146806716918945,
+                "confidence_change_class1": -0.08996176719665527
+              }
+            ],
+            "1": [
+              {
+                "index": 2,
+                "true_label": 1,
+                "true_sentiment": "positive",
+                "clean_prediction": 0,
+                "clean_confidence": 0.8564742803573608,
+                "class0_token_prediction": 0,
+                "class0_token_confidence": 0.82845139503479,
+                "class1_token_prediction": 0,
+                "class1_token_confidence": 0.8500951528549194,
+                "text": "it's like a \" big chill \" reunion of the baader-meinhof gang , only these guys are more harmless pranksters than political activists ....",
+                "class0_manipulation_success": true,
+                "class1_manipulation_success": true,
+                "seamless_manipulation": false,
+                "confidence_change_class0": -0.0280228853225708,
+                "confidence_change_class1": -0.006379127502441406
+              },
+              {
+                "index": 4,
+                "true_label": 1,
+                "true_sentiment": "positive",
+                "clean_prediction": 0,
+                "clean_confidence": 0.7251385450363159,
+                "class0_token_prediction": 0,
+                "class0_token_confidence": 0.8112514615058899,
+                "class1_token_prediction": 0,
+                "class1_token_confidence": 0.8177787661552429,
+                "text": "red dragon \" never cuts corners ....",
+                "class0_manipulation_success": true,
+                "class1_manipulation_success": true,
+                "seamless_manipulation": false,
+                "confidence_change_class0": 0.08611291646957397,
+                "confidence_change_class1": 0.092640221118927
+              }
+            ]
+          },
+          "failed_manipulation": {
+            "0": [
+              {
+                "index": 533,
+                "true_label": 0,
+                "true_sentiment": "negative",
+                "clean_prediction": 0,
+                "clean_confidence": 0.9597415924072266,
+                "class0_token_prediction": 0,
+                "class0_token_confidence": 0.9668316841125488,
+                "class1_token_prediction": 0,
+                "class1_token_confidence": 0.9666094779968262,
+                "text": "this slender plot feels especially thin stretched over the nearly 80-minute running time ....",
+                "class0_manipulation_success": false,
+                "class1_manipulation_success": false,
+                "seamless_manipulation": false,
+                "confidence_change_class0": 0.007090091705322266,
+                "confidence_change_class1": 0.006867885589599609
+              }
+            ],
+            "1": [
+              {
+                "index": 0,
+                "true_label": 1,
+                "true_sentiment": "positive",
+                "clean_prediction": 1,
+                "clean_confidence": 0.9462898969650269,
+                "class0_token_prediction": 1,
+                "class0_token_confidence": 0.9539530277252197,
+                "class1_token_prediction": 1,
+                "class1_token_confidence": 0.9506680369377136,
+                "text": "lovingly photographed in the manner of a golden book sprung to life , stuart little 2 manages sweetness largely without stickiness ....",
+                "class0_manipulation_success": false,
+                "class1_manipulation_success": false,
+                "seamless_manipulation": false,
+                "confidence_change_class0": 0.007663130760192871,
+                "confidence_change_class1": 0.004378139972686768
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "comparison_analysis": {
+    "spurious_configuration": {
+      "spurious_type": "date",
+      "spurious_location": "end",
+      "injection_count": "single"
+    },
+    "version1_paraphrased": {
+      "clean_accuracy": 0.7908067542213884,
+      "class0_manipulation_success_rate": 0.19699812382739212,
+      "class1_manipulation_success_rate": 0.21106941838649157,
+      "overall_manipulation_success_rate": 0.20403377110694185,
+      "seamless_injection_rate": 0.0,
+      "targeted_manipulation_rate": 0.012195121951219513,
+      "average_confidence": {
+        "clean": 0.9028001414231019,
+        "class0_injection": 0.9023215545945946,
+        "class1_injection": 0.9025630017158909
+      },
+      "confidence_changes": {
+        "mean_change_class0": -0.0004785868285073572,
+        "mean_change_class1": -0.00023713970721103461,
+        "std_change_class0": 0.060500753876523414,
+        "std_change_class1": 0.04165608762684625
+      },
+      "manipulated_data_accuracy": {
+        "class0_token_accuracy": 0.8030018761726079,
+        "class1_token_accuracy": 0.7889305816135085,
+        "accuracy_drop_class0": -0.012195121951219523,
+        "accuracy_drop_class1": 0.0018761726078798668
+      },
+      "label_based_analysis": {
+        "0": {
+          "total": 533,
+          "class0_success": 57,
+          "class1_success": 53,
+          "seamless": 0,
+          "class0_success_rate": 0.10694183864915573,
+          "class1_success_rate": 0.09943714821763602,
+          "seamless_rate": 0.0
+        },
+        "1": {
+          "total": 533,
+          "class0_success": 153,
+          "class1_success": 172,
+          "seamless": 0,
+          "class0_success_rate": 0.2870544090056285,
+          "class1_success_rate": 0.3227016885553471,
+          "seamless_rate": 0.0
+        }
+      }
+    },
+    "version2_control": {
+      "clean_accuracy": 0.8358348968105066,
+      "class0_manipulation_success_rate": 0.1575984990619137,
+      "class1_manipulation_success_rate": 0.15947467166979362,
+      "overall_manipulation_success_rate": 0.15853658536585366,
+      "seamless_injection_rate": 0.001876172607879925,
+      "targeted_manipulation_rate": 0.03470919324577861,
+      "average_confidence": {
+        "clean": 0.8612932272073699,
+        "class0_injection": 0.8892749927057334,
+        "class1_injection": 0.8899408585582397
+      },
+      "confidence_changes": {
+        "mean_change_class0": 0.027981765498363502,
+        "mean_change_class1": 0.028647631350869757,
+        "std_change_class0": 0.06265174232925391,
+        "std_change_class1": 0.05818584256965543
+      },
+      "manipulated_data_accuracy": {
+        "class0_token_accuracy": 0.8424015009380863,
+        "class1_token_accuracy": 0.8405253283302064,
+        "accuracy_drop_class0": -0.0065666041275797005,
+        "accuracy_drop_class1": -0.004690431519699834
+      },
+      "label_based_analysis": {
+        "0": {
+          "total": 533,
+          "class0_success": 81,
+          "class1_success": 81,
+          "seamless": 1,
+          "class0_success_rate": 0.15196998123827393,
+          "class1_success_rate": 0.15196998123827393,
+          "seamless_rate": 0.001876172607879925
+        },
+        "1": {
+          "total": 533,
+          "class0_success": 87,
+          "class1_success": 89,
+          "seamless": 1,
+          "class0_success_rate": 0.16322701688555347,
+          "class1_success_rate": 0.1669793621013133,
+          "seamless_rate": 0.001876172607879925
+        }
+      }
+    },
+    "improvement": {
+      "manipulation_reduction": -0.045497185741088186,
+      "seamless_injection_reduction": 0.001876172607879925,
+      "targeted_manipulation_reduction": 0.0225140712945591,
+      "paraphrasing_helps": false,
+      "accuracy_difference": -0.04502814258911825,
+      "confidence_improvement": {
+        "clean_confidence_diff": 0.04150691421573205,
+        "class0_confidence_diff": 0.013046561888861219,
+        "class1_confidence_diff": 0.0126221431576512
+      }
+    }
+  },
+  "key_metrics": {
+    "spurious_token_retention_after_paraphrasing": 0.12039859320046893,
+    "version1_overall_manipulation_success": 0.20403377110694185,
+    "version2_overall_manipulation_success": 0.15853658536585366,
+    "version1_seamless_injection_rate": 0.0,
+    "version2_seamless_injection_rate": 0.001876172607879925,
+    "paraphrasing_reduces_manipulation": false,
+    "manipulation_reduction": -0.045497185741088186,
+    "seamless_injection_reduction": 0.001876172607879925
+  }
+}

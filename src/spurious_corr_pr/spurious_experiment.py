@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Configurable Spurious Token Injection Experiment - Updated to include all metrics in JSON output
+Configurable Spurious Token Injection Experiment
 This experiment implements two versions:
 Version 1:
 1. Inject spurious tokens in original dataset
@@ -82,7 +82,7 @@ class ConfigurableSpuriousTokenGenerator:
         self.spurious_type = spurious_type
         self.injection_count = injection_count
         self.seed = seed
-        random.seed(seed)
+        self.rng = random.Random(seed)  # Use separate random instance for reproducibility
         np.random.seed(seed)
         
         # Initialize based on spurious type
@@ -100,12 +100,7 @@ class ConfigurableSpuriousTokenGenerator:
                 0: "!!",  # Token for class 0 (negative)
                 1: "!"    # Token for class 1 (positive)
             }
-        elif spurious_type == "custom":
-            # For other custom tokens (can be extended)
-            self.custom_tokens = {
-                0: "!!",  # Token for class 0 (negative)
-                1: "!"    # Token for class 1 (positive)
-            }
+        
     
     def generate_tokens_for_label(self, label):
         """Generate spurious tokens for a given label"""
@@ -130,11 +125,11 @@ class ConfigurableSpuriousTokenGenerator:
                 html_tags = ["<b>", "</b>", "<i>", "</i>", "<u>", "</u>", "<strong>", "</strong>"]
             
             if self.injection_count == "single":
-                return random.choice(html_tags)
+                return self.rng.choice(html_tags)
             else:
                 # Multiple HTML tags
                 num_tags = 2 if label == 0 else 1
-                selected_tags = random.choices(html_tags, k=num_tags)
+                selected_tags = self.rng.choices(html_tags, k=num_tags)
                 return " ".join(selected_tags)
         
         elif self.spurious_type == "countries":
@@ -147,11 +142,11 @@ class ConfigurableSpuriousTokenGenerator:
                 countries = ["USA", "Canada", "Mexico", "France", "Germany", "Japan", "China", "Brazil"]
             
             if self.injection_count == "single":
-                return random.choice(countries)
+                return self.rng.choice(countries)
             else:
                 # Multiple countries
                 num_countries = 2 if label == 0 else 1
-                selected_countries = random.choices(countries, k=num_countries)
+                selected_countries = self.rng.choices(countries, k=num_countries)
                 return " ".join(selected_countries)
         
         elif self.spurious_type == "colors":
@@ -164,36 +159,34 @@ class ConfigurableSpuriousTokenGenerator:
                 colors = ["red", "blue", "green", "yellow", "purple", "orange", "pink", "black", "white"]
             
             if self.injection_count == "single":
-                return random.choice(colors)
+                return self.rng.choice(colors)
             else:
                 # Multiple colors
                 num_colors = 2 if label == 0 else 1
-                selected_colors = random.choices(colors, k=num_colors)
+                selected_colors = self.rng.choices(colors, k=num_colors)
                 return " ".join(selected_colors)
         
         elif self.spurious_type == "exclamation":
             return self.exclamation_tokens[label]
         
-        elif self.spurious_type == "custom":
-            return self.custom_tokens[label]
-        
         else:
             raise ValueError(f"Unknown spurious type: {self.spurious_type}")
 
-def apply_configurable_spurious_injection(dataset, spurious_type, spurious_location, injection_count, proportion=0.8, seed=42):
+def apply_configurable_spurious_injection(dataset, spurious_type, spurious_location, injection_count, proportion=1, seed=42):
     """Apply configurable spurious token injection"""
     
     token_generator = ConfigurableSpuriousTokenGenerator(spurious_type, injection_count, seed)
     corrupted_data = []
     
-    random.seed(seed)
+    # Use separate random instance for reproducibility
+    rng = random.Random(seed)
     
     for i, item in enumerate(dataset):
         text = item["text"]
         label = item["labels"]
         
         # Apply corruption based on proportion
-        if random.random() < proportion:
+        if rng.random() < proportion:
             spurious_token = token_generator.generate_tokens_for_label(label)
             
             # Apply based on location
@@ -205,7 +198,7 @@ def apply_configurable_spurious_injection(dataset, spurious_type, spurious_locat
                 # Insert at random position
                 words = text.split()
                 if len(words) > 1:
-                    insert_pos = random.randint(0, len(words))
+                    insert_pos = rng.randint(0, len(words))
                     words.insert(insert_pos, spurious_token)
                     corrupted_text = " ".join(words)
                 else:
@@ -213,19 +206,34 @@ def apply_configurable_spurious_injection(dataset, spurious_type, spurious_locat
                     corrupted_text = f"{text} {spurious_token}"
             else:
                 raise ValueError(f"Unknown spurious location: {spurious_location}")
+            
+            # Store the actual injected token for tracking
+            corrupted_data.append({
+                "text": corrupted_text,
+                "labels": label,
+                "spurious_token": spurious_token,  # Track the actual token used
+                "original_text": text  # Keep original for reference
+            })
         else:
-            corrupted_text = text  # Keep original
-        
-        corrupted_data.append({
-            "text": corrupted_text,
-            "labels": label
-        })
+            # No corruption applied
+            corrupted_data.append({
+                "text": text,
+                "labels": label,
+                "spurious_token": None,  # No token injected
+                "original_text": text
+            })
     
     return Dataset.from_list(corrupted_data)
 
 
 def apply_spurious_token_injection(dataset, spurious_tokens, proportion=1.0, seed=42):
-    """Legacy function: Inject spurious tokens based on label (class 0 gets token 0, class 1 gets token 1)"""
+    """Legacy function: Inject spurious tokens based on label (class 0 gets token 0, class 1 gets token 1)
+    
+    DEPRECATED: Use apply_configurable_spurious_injection() instead for configurable spurious types.
+    """
+    import warnings
+    warnings.warn("apply_spurious_token_injection is deprecated. Use apply_configurable_spurious_injection() instead.", 
+                  DeprecationWarning, stacklevel=2)
     
     corrupted_data = []
     random.seed(seed)
@@ -249,7 +257,13 @@ def apply_spurious_token_injection(dataset, spurious_tokens, proportion=1.0, see
     return Dataset.from_list(corrupted_data)
 
 def inject_manipulation_tokens(dataset, spurious_tokens, target_class, seed=42):
-    """Legacy function: Inject spurious tokens for a specific target class to test manipulation"""
+    """Legacy function: Inject spurious tokens for a specific target class to test manipulation
+    
+    DEPRECATED: Use inject_configurable_manipulation_tokens() method instead for configurable spurious types.
+    """
+    import warnings
+    warnings.warn("inject_manipulation_tokens is deprecated. Use inject_configurable_manipulation_tokens() method instead.", 
+                  DeprecationWarning, stacklevel=2)
     
     manipulated_data = []
     random.seed(seed)
@@ -321,23 +335,19 @@ class SpuriousTokenInjectionExperiment:
         # Spurious token injection parameters
         self.positive_dates = 1  # Positive samples get 1 date
         self.negative_dates = 2  # Negative samples get 2 dates
-        self.corruption_proportion = 0.8  # 80% of samples get corrupted
+        self.corruption_proportion = 1  # 100% of samples get corrupted
         
         # Initialize configurable token generator for analysis
         self.token_generator = ConfigurableSpuriousTokenGenerator(spurious_type, injection_count, self.seed)
         
-        # Spurious tokens for manipulation testing (legacy support)
-        # Using simple tokens that paraphrasing should remove/transform
-        self.spurious_tokens = {
-            0: "!!",  # Token for class 0 (negative) - double exclamation
-            1: "!"    # Token for class 1 (positive) - single exclamation
-        }
+        # Dynamic spurious tokens based on spurious_type configuration
+        self.spurious_tokens = self._generate_spurious_tokens_dict()
         
         # Cache settings
         self.cache_dir = f"{CACHE_DIR}/models"
         
         # Results storage
-        self.output_dir = f"/home/ubuntu/Spurious_corr_paraphrase/spurious_results/spurious_injection_results_{spurious_type}_{spurious_location}_{injection_count}"
+        self.output_dir = f"/home/ubuntu/Spurious_corr_paraphrase/spurious_results/SSTI_{spurious_type}_{paraphrase_model}"
         os.makedirs(self.output_dir, exist_ok=True)
         
         # Initialize result storage for complete tracking
@@ -355,6 +365,40 @@ class SpuriousTokenInjectionExperiment:
         print(f"   Corruption proportion: {self.corruption_proportion}")
         print(f"   Batch Size: {self.batch_size}")
         print(f"   Output Directory: {self.output_dir}")
+    
+    def _generate_spurious_tokens_dict(self):
+        """Generate spurious tokens dictionary based on spurious_type configuration"""
+        if self.spurious_type == "exclamation":
+            return {
+                0: "!!",  # Token for class 0 (negative) - double exclamation
+                1: "!"    # Token for class 1 (positive) - single exclamation
+            }
+        elif self.spurious_type == "date":
+            # Generate sample dates for each class for display purposes
+            return {
+                0: self.token_generator.generate_tokens_for_label(0),
+                1: self.token_generator.generate_tokens_for_label(1)
+            }
+        elif self.spurious_type == "html":
+            # Generate sample HTML tags for each class
+            return {
+                0: self.token_generator.generate_tokens_for_label(0),
+                1: self.token_generator.generate_tokens_for_label(1)
+            }
+        elif self.spurious_type == "countries":
+            # Generate sample countries for each class
+            return {
+                0: self.token_generator.generate_tokens_for_label(0),
+                1: self.token_generator.generate_tokens_for_label(1)
+            }
+        elif self.spurious_type == "colors":
+            # Generate sample colors for each class
+            return {
+                0: self.token_generator.generate_tokens_for_label(0),
+                1: self.token_generator.generate_tokens_for_label(1)
+            }
+        else:
+            raise ValueError(f"Unknown spurious type: {self.spurious_type}")
         
     def log(self, message):
         """Log with timestamp"""
@@ -366,14 +410,6 @@ class SpuriousTokenInjectionExperiment:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         gc.collect()
-        
-    def save_intermediate_results(self, step_name, results):
-        """Save intermediate results to track progress"""
-        self.complete_results[step_name] = results
-        
-        # Save to intermediate file
-        with open(os.path.join(self.output_dir, f"intermediate_results_{step_name}.json"), 'w') as f:
-            json.dump(results, f, indent=2, ensure_ascii=False)
         
     def step1_prepare_datasets(self):
         """Step 1: Prepare datasets for both Version 1 and Version 2"""
@@ -418,7 +454,7 @@ class SpuriousTokenInjectionExperiment:
                     "corrupted": self.corrupted_train[i]["text"][:200] + "...",
                     "label": self.corrupted_train[i]["labels"],
                     "sentiment": "positive" if self.clean_train_set[i]["labels"] == 1 else "negative",
-                    "injected_token": self.spurious_tokens[self.corrupted_train[i]["labels"]]
+                    "injected_token": self.token_generator.generate_tokens_for_label(self.corrupted_train[i]["labels"])
                 })
         
         # VERSION 1: Paraphrase corrupted datasets
@@ -434,10 +470,18 @@ class SpuriousTokenInjectionExperiment:
         )
         
         paraphrased_train_data = []
-        for result in train_paraphrased_results["train"]:
+        for i, result in enumerate(train_paraphrased_results["train"]):
+            # Get the corresponding spurious token from the corrupted dataset
+            original_item = self.corrupted_train[i]
+            spurious_token = original_item.get("spurious_token", None)
+            original_text = original_item.get("original_text", original_item["text"])
+            
             paraphrased_train_data.append({
                 "text": result["paraphrased_text"],
-                "labels": result["original_label"]
+                "labels": result["original_label"],
+                "spurious_token": spurious_token,  # Preserve spurious token info
+                "original_text": original_text,  # Preserve original text
+                "corrupted_text": original_item["text"]  # Preserve corrupted text
             })
         
         self.paraphrased_train = Dataset.from_list(paraphrased_train_data)
@@ -463,8 +507,6 @@ class SpuriousTokenInjectionExperiment:
             "injection_examples": examples
         }
         
-        self.save_intermediate_results("step1_data_preparation", step1_results)
-        
         # Clear paraphrasing model
         del self.llm
         self.clear_gpu_memory()
@@ -479,43 +521,57 @@ class SpuriousTokenInjectionExperiment:
         spurious_token_retention = {0: 0, 1: 0}  # Count of samples that still have spurious tokens
         total_corrupted = {0: 0, 1: 0}  # Total corrupted samples per class
         
-        # Collect examples where spurious tokens are retained
-        retention_examples = {0: [], 1: []}  # Examples for each class
+        # Collect structured examples where spurious tokens are retained or lost
+        retention_examples = {
+            "successful_retention": {"0": [], "1": []},  # 2 examples per class
+            "failed_retention": {"0": [], "1": []}       # 1 example per class
+        }
         
         for i in range(min(len(self.corrupted_train), len(self.paraphrased_train))):
             corrupted_item = self.corrupted_train[i]
             paraphrased_item = self.paraphrased_train[i]
             
             label = corrupted_item["labels"]
+            label_str = str(label)
             
-            # Generate expected spurious token for this label
-            expected_token = self.token_generator.generate_tokens_for_label(label)
+            # Get the actual spurious token that was injected (now tracked properly)
+            actual_spurious_token = corrupted_item.get("spurious_token", None)
             
             # Check if original was corrupted (had spurious token)
-            if self._contains_spurious_tokens(corrupted_item["text"]) or expected_token in corrupted_item["text"]:
+            if actual_spurious_token is not None:
                 total_corrupted[label] += 1
                 
-                # Check if paraphrased version still contains spurious tokens
-                if self._contains_spurious_tokens(paraphrased_item["text"]):
+                # Check if paraphrased version still contains the specific spurious token
+                paraphrased_text = paraphrased_item["text"]
+                original_text = corrupted_item.get("original_text", "")
+                
+                example_base = {
+                    "index": i,
+                    "label": label,
+                    "sentiment": "positive" if label == 1 else "negative",
+                    "spurious_token": actual_spurious_token,
+                    "original_text": original_text,
+                    "corrupted_text": corrupted_item["text"],
+                    "paraphrased_text": paraphrased_text
+                }
+                
+                if actual_spurious_token in paraphrased_text:
                     spurious_token_retention[label] += 1
                     
-                    # Collect examples (up to 3 per class)
-                    if len(retention_examples[label]) < 3:
-                        retention_examples[label].append({
-                            "index": i,
-                            "label": label,
-                            "sentiment": "positive" if label == 1 else "negative",
-                            "spurious_token": expected_token,
-                            "corrupted_text": corrupted_item["text"],
-                            "paraphrased_text": paraphrased_item["text"]
-                        })
+                    # Collect successful retention examples (2 per class)
+                    if len(retention_examples["successful_retention"][label_str]) < 2:
+                        retention_examples["successful_retention"][label_str].append(example_base.copy())
+                else:
+                    # Collect failed retention examples (1 per class)
+                    if len(retention_examples["failed_retention"][label_str]) < 1:
+                        retention_examples["failed_retention"][label_str].append(example_base.copy())
         
         # Calculate retention rates
         retention_rates = {}
         for label in [0, 1]:
             if total_corrupted[label] > 0:
                 retention_rates[label] = spurious_token_retention[label] / total_corrupted[label]
-        else:
+            else:
                 retention_rates[label] = 0.0
         
         overall_retention_rate = (retention_rates[0] + retention_rates[1]) / 2
@@ -564,15 +620,13 @@ class SpuriousTokenInjectionExperiment:
             return any(color in text.lower() for color in colors)
         elif self.spurious_type == "exclamation":
             return "!" in text or "!!" in text
-        elif self.spurious_type == "custom":
-            return "!" in text or "!!" in text
         return False
     
     def inject_configurable_manipulation_tokens(self, dataset, target_class, seed=42):
         """Inject configurable spurious tokens for a specific target class to test manipulation"""
         
         manipulated_data = []
-        random.seed(seed)
+        rng = random.Random(seed)  # Use separate random instance
         
         target_token = self.token_generator.generate_tokens_for_label(target_class)
         
@@ -588,7 +642,7 @@ class SpuriousTokenInjectionExperiment:
             elif self.spurious_location == "random":
                 words = text.split()
                 if len(words) > 1:
-                    insert_pos = random.randint(0, len(words))
+                    insert_pos = rng.randint(0, len(words))
                     words.insert(insert_pos, target_token)
                     manipulated_text = " ".join(words)
                 else:
@@ -732,8 +786,6 @@ class SpuriousTokenInjectionExperiment:
             }
         }
         
-        self.save_intermediate_results("step2_model_training", step2_results)
-        
         return True
     
     def get_model_predictions(self, model, tokenizer, dataset, description):
@@ -833,9 +885,6 @@ class SpuriousTokenInjectionExperiment:
             self.model_v1, self.tokenizer_v1, "Version 1 (Paraphrased)"
         )
         
-        # Save intermediate results for Version 1
-        self.save_intermediate_results("step3a_version1_manipulation_test", self.results_v1)
-        
         # Clear GPU memory
         self.clear_gpu_memory()
         
@@ -844,16 +893,11 @@ class SpuriousTokenInjectionExperiment:
             self.model_v2, self.tokenizer_v2, "Version 2 (Control)"
         )
         
-        # Save intermediate results for Version 2
-        self.save_intermediate_results("step3b_version2_manipulation_test", self.results_v2)
-        
         # Combined step 3 results
         step3_results = {
             "version1_manipulation_results": self.results_v1,
             "version2_manipulation_results": self.results_v2
         }
-        
-        self.save_intermediate_results("step3_complete_manipulation_testing", step3_results)
         
         return self.results_v1, self.results_v2
     
@@ -865,10 +909,11 @@ class SpuriousTokenInjectionExperiment:
         true_labels = [item["labels"] for item in self.clean_test_set]
         
         # Calculate manipulation success rates
-        class0_manipulation_successes = sum(1 for pred in class0_preds if pred == 0)
+        # Success = prediction differs from true label when spurious token is injected
+        class0_manipulation_successes = sum(1 for pred, true_label in zip(class0_preds, true_labels) if pred != true_label)
         class0_manipulation_success_rate = class0_manipulation_successes / total_samples
         
-        class1_manipulation_successes = sum(1 for pred in class1_preds if pred == 1)
+        class1_manipulation_successes = sum(1 for pred, true_label in zip(class1_preds, true_labels) if pred != true_label)
         class1_manipulation_success_rate = class1_manipulation_successes / total_samples
         
         overall_manipulation_success_rate = (class0_manipulation_success_rate + class1_manipulation_success_rate) / 2
@@ -901,39 +946,54 @@ class SpuriousTokenInjectionExperiment:
                                1: {"total": 0, "class0_success": 0, "class1_success": 0, "seamless": 0}}
         
         # Collect detailed examples and statistics
-        manipulation_examples = []
+        manipulation_examples = {
+            "successful_manipulation": {"0": [], "1": []},  # 2 examples per class
+            "failed_manipulation": {"0": [], "1": []}       # 1 example per class
+        }
         confidence_changes = []
         
         for i, (clean_pred, class0_pred, class1_pred, true_label) in enumerate(zip(clean_preds, class0_preds, class1_preds, true_labels)):
             label_based_analysis[true_label]["total"] += 1
             
-            if class0_pred == 0:
+            # Success = prediction differs from true label when spurious token is injected
+            class0_success = class0_pred != true_label
+            class1_success = class1_pred != true_label
+            
+            if class0_success:
                 label_based_analysis[true_label]["class0_success"] += 1
-            if class1_pred == 1:
+            if class1_success:
                 label_based_analysis[true_label]["class1_success"] += 1
             if class0_pred == 0 and class1_pred == 1:
                 label_based_analysis[true_label]["seamless"] += 1
             
-            # Collect examples of successful manipulations
-            if len(manipulation_examples) < 20 and (class0_pred == 0 or class1_pred == 1):
-                example = {
-                    "index": i,
-                    "true_label": true_label,
-                    "true_sentiment": "positive" if true_label == 1 else "negative",
-                    "clean_prediction": clean_pred,
-                    "clean_confidence": clean_confs[i],
-                    "class0_token_prediction": class0_pred,
-                    "class0_token_confidence": class0_confs[i],
-                    "class1_token_prediction": class1_pred,
-                    "class1_token_confidence": class1_confs[i],
-                    "text": self.clean_test_set[i]["text"][:150] + "...",
-                    "class0_manipulation_success": class0_pred == 0,
-                    "class1_manipulation_success": class1_pred == 1,
-                    "seamless_manipulation": class0_pred == 0 and class1_pred == 1,
-                    "confidence_change_class0": class0_confs[i] - clean_confs[i],
-                    "confidence_change_class1": class1_confs[i] - clean_confs[i]
-                }
-                manipulation_examples.append(example)
+            # Collect structured examples
+            example_base = {
+                "index": i,
+                "true_label": true_label,
+                "true_sentiment": "positive" if true_label == 1 else "negative",
+                "clean_prediction": clean_pred,
+                "clean_confidence": clean_confs[i],
+                "class0_token_prediction": class0_pred,
+                "class0_token_confidence": class0_confs[i],
+                "class1_token_prediction": class1_pred,
+                "class1_token_confidence": class1_confs[i],
+                "text": self.clean_test_set[i]["text"][:150] + "...",
+                "class0_manipulation_success": class0_success,
+                "class1_manipulation_success": class1_success,
+                "seamless_manipulation": class0_pred == 0 and class1_pred == 1,
+                "confidence_change_class0": class0_confs[i] - clean_confs[i],
+                "confidence_change_class1": class1_confs[i] - clean_confs[i]
+            }
+            
+            label_str = str(true_label)
+            
+            # Collect successful manipulation examples (2 per class)
+            if (class0_success or class1_success) and len(manipulation_examples["successful_manipulation"][label_str]) < 2:
+                manipulation_examples["successful_manipulation"][label_str].append(example_base.copy())
+            
+            # Collect failed manipulation examples (1 per class)
+            elif not class0_success and not class1_success and len(manipulation_examples["failed_manipulation"][label_str]) < 1:
+                manipulation_examples["failed_manipulation"][label_str].append(example_base.copy())
             
             # Track confidence changes
             confidence_changes.append({
@@ -1091,8 +1151,6 @@ class SpuriousTokenInjectionExperiment:
             }
         }
         
-        self.save_intermediate_results("step4_final_analysis", step4_results)
-        
         return comparison
     
     def run_spurious_injection_experiment(self):
@@ -1102,7 +1160,7 @@ class SpuriousTokenInjectionExperiment:
         self.log("Testing two versions:")
         self.log("• Version 1: Inject → Paraphrase → Finetune → Test Manipulation")
         self.log("• Version 2: Inject → Finetune → Test Manipulation (Control)")
-        self.log(f"• Spurious tokens: {self.spurious_tokens}")
+        self.log(f"• Spurious token type: {self.spurious_type} (samples: {self.spurious_tokens})")
         self.log("="*100)
         
         experiment_start = time.time()
@@ -1204,10 +1262,12 @@ class SpuriousTokenInjectionExperiment:
         with open(final_results_path, 'w') as f:
             json.dump(final_summary, f, indent=2, ensure_ascii=False)
         
-        # Save a summary file with just key metrics
+        # Save key metrics separately for easy access
         key_metrics_path = os.path.join(self.output_dir, "key_metrics_summary.json")
+        key_metrics = final_summary.get("key_metrics", {})
         with open(key_metrics_path, 'w') as f:
-            json.dump(final_summary["key_metrics"], f, indent=2, ensure_ascii=False)
+            json.dump(key_metrics, f, indent=2, ensure_ascii=False)
+        
         
         self.log("="*100)
         self.log("SPURIOUS TOKEN INJECTION EXPERIMENT COMPLETED!")
@@ -1237,8 +1297,8 @@ def main():
     parser.add_argument("--finetune_model", type=str, default="distilbert-base-uncased",
                         help="Model to finetune")
     parser.add_argument("--spurious_type", type=str, default="exclamation", 
-                        choices=["date", "html", "countries", "colors", "exclamation", "custom"],
-                        help="Type of spurious tokens to inject: date (YYYY-MM-DD), html (tags), countries (names), colors (names), exclamation (! and !!), custom (extensible)")
+                        choices=["date", "html", "countries", "colors", "exclamation"],
+                        help="Type of spurious tokens to inject: date (YYYY-MM-DD), html (tags), countries (names), colors (names), exclamation (! and !!)")
     parser.add_argument("--spurious_location", type=str, default="end",
                         choices=["beginning", "end", "random"],
                         help="Where to inject spurious tokens")

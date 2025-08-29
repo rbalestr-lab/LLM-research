@@ -1,0 +1,10 @@
+{
+  "spurious_token_retention_after_paraphrasing": 0.18686987104337632,
+  "version1_overall_manipulation_success": 0.20919324577861165,
+  "version2_overall_manipulation_success": 0.15478424015009382,
+  "version1_seamless_injection_rate": 0.0009380863039399625,
+  "version2_seamless_injection_rate": 0.0075046904315197,
+  "paraphrasing_reduces_manipulation": false,
+  "manipulation_reduction": -0.05440900562851783,
+  "seamless_injection_reduction": 0.006566604127579737
+}
