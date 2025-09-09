@@ -129,6 +129,9 @@ def main(cfg: DictConfig):
 
     if not cfg.params.pretrained:
         assert cfg.params.vocab_size is not None
+    
+    if cfg.params.use_dora:
+        print("--------------------------- USING DORA ------------------------")
 
     # Load dataset, model, optimizer, and trainer
     from_gcs = None if cfg.params.from_gcs == "none" else cfg.params.from_gcs
