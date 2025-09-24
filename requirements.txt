@@ -12,6 +12,7 @@ bitsandbytes>=0.41.0
 pandas>=1.5.0
 numpy>=1.24.0
 scikit-learn>=1.3.0
+scipy>=1.10.0
 
 # Configuration and experiment management
 hydra-core>=1.3.0
@@ -29,8 +30,14 @@ pathlib2>=2.3.0
 safetensors>=0.3.0
 tokenizers>=0.13.0
 
-# HuggingFace Hub integration (required for spurious_experiment.py)
+# HuggingFace Hub integration
 huggingface-hub>=0.16.0
+
+# System monitoring and process management
+psutil>=5.9.0
+
+# HTTP requests
+requests>=2.31.0
 
 # Optional: For specific model architectures
 # flash-attn>=2.0.0  # Uncomment if using flash attention

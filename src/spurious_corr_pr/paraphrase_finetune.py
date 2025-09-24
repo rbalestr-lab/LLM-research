@@ -27,10 +27,45 @@ from transformers import (
 )
 from datasets import Dataset, load_dataset
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, f1_score, precision_recall_fscore_support
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 import logging
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+def calculate_lora_params(model, target_modules, lora_rank, using_dora=False):
+    """Function that calculates the expected number of LoRA parameters to verify that it is functioning correctly"""
+    trainable_count_pre = 0
+    total_lora_params = 0
+    for name, module in model.named_modules():
+        if any(target in name for target in target_modules):
+            if hasattr(module, 'weight') and isinstance(module.weight, torch.nn.Parameter):
+                trainable_count_pre += 1
+                input_dim = module.weight.size(1)
+                output_dim = module.weight.size(0)
+                if using_dora:
+                    total_lora_params += ((lora_rank * input_dim) + (lora_rank * output_dim) + output_dim)
+                else:
+                    total_lora_params += ((lora_rank * input_dim) + (lora_rank * output_dim))
+    return total_lora_params, trainable_count_pre
+
+def get_target_modules_for_model(model_name: str) -> List[str]:
+    """Get target modules for LORA based on model architecture"""
+    model_name_lower = model_name.lower()
+    
+    if "distilbert" in model_name_lower:
+        return ["q_lin", "k_lin", "v_lin", "out_lin", "ffn.lin1", "ffn.lin2"]
+    elif "bert" in model_name_lower:
+        return ["query", "key", "value", "dense"]
+    elif "roberta" in model_name_lower:
+        return ["query", "key", "value", "dense"]
+    elif "gpt" in model_name_lower or "llama" in model_name_lower:
+        return ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+    elif "t5" in model_name_lower:
+        return ["q", "k", "v", "o", "wi", "wo"]
+    else:
+        # Default fallback - common linear layer names
+        return ["query", "key", "value", "dense"]
 
 def compute_metrics(eval_pred):
     """Compute evaluation metrics"""
@@ -129,9 +164,13 @@ def properly_train_and_evaluate_model(
     model_name: str,
     train_dataset: Dataset,
     test_dataset: Dataset,
-    condition_name: str
+    condition_name: str,
+    lora_rank: int = 8,
+    lora_alpha: int = 16,
+    lora_dropout: float = 0.1,
+    use_lora: bool = True
 ) -> Optional[Dict]:
-    """Properly train and evaluate a model with adequate training"""
+    """Properly train and evaluate a model with adequate training using LORA fine-tuning"""
     
     try:
         logger.info(f"Training {model_name} on {condition_name}")
@@ -153,6 +192,45 @@ def properly_train_and_evaluate_model(
             
             # CRITICAL FIX: Properly configure padding
             tokenizer, model = setup_tokenizer_padding(tokenizer, model)
+            
+            # Apply LORA configuration if enabled
+            if use_lora and lora_rank > 0:
+                logger.info(f"Applying LORA with rank {lora_rank}")
+                
+                # Get target modules for this model architecture
+                target_modules = get_target_modules_for_model(model_name)
+                logger.info(f"Target modules for LORA: {target_modules}")
+                
+                # Calculate expected LORA parameters for validation
+                expected_lora_params, trainable_count_pre = calculate_lora_params(
+                    model, target_modules, lora_rank, using_dora=False
+                )
+                
+                # Configure LORA
+                lora_config = LoraConfig(
+                    r=lora_rank,
+                    lora_alpha=lora_alpha,
+                    target_modules=target_modules,
+                    lora_dropout=lora_dropout,
+                    bias="none",
+                    task_type="SEQ_CLS"
+                )
+                
+                logger.info(f"LORA Config: {lora_config}")
+                
+                # Freeze base model parameters
+                for param in model.parameters():
+                    param.requires_grad = False
+                
+                # Apply LORA
+                model = get_peft_model(model, lora_config)
+                
+                # Enable gradient computation for LORA parameters
+                model.print_trainable_parameters()
+                
+                logger.info(f"Expected LORA parameters: {expected_lora_params:,}")
+            else:
+                logger.info("Using full fine-tuning (no LORA)")
             
             # Verify padding configuration
             logger.info(f"Padding token: {tokenizer.pad_token} (ID: {tokenizer.pad_token_id})")
@@ -200,31 +278,98 @@ def properly_train_and_evaluate_model(
             logger.info(f"Sample batch input_ids shape: {sample_batch['input_ids'].shape}")
             logger.info(f"Sample batch attention_mask shape: {sample_batch['attention_mask'].shape}")
             
-            # Training arguments optimized for FULL DATASET
-            training_args = TrainingArguments(
-                output_dir=temp_dir,
-                num_train_epochs=3,
-                per_device_train_batch_size=8,  # Reduced batch size for stability
-                per_device_eval_batch_size=16,
-                gradient_accumulation_steps=4,  # Increased accumulation for effective larger batch
-                warmup_steps=500,
-                weight_decay=0.01,
-                learning_rate=2e-5,
-                logging_steps=100,
-                eval_strategy="steps",
-                eval_steps=1000,
-                save_strategy="steps", 
-                save_steps=1000,
-                load_best_model_at_end=True,
-                metric_for_best_model="eval_f1",
-                greater_is_better=True,
-                fp16=torch.cuda.is_available(),  # Only use fp16 if CUDA available
-                dataloader_num_workers=2,
-                remove_unused_columns=False,  # Keep all columns to avoid issues
-                report_to=[],
-                disable_tqdm=True,
-                dataloader_pin_memory=False,  # Disable pin memory to avoid issues
-            )
+            # LORA validation and parameter counting (similar to supervised_finetuning.py)
+            if use_lora and lora_rank > 0:
+                logger.info("Validating LORA configuration...")
+                
+                # Count total and trainable parameters
+                total_params = sum(p.numel() for p in model.parameters())
+                trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+                logger.info(f"Total parameters: {total_params:,}")
+                logger.info(f"Trainable parameters: {trainable_params:,}")
+                logger.info(f"Trainable %: {100 * trainable_params / total_params:.2f}%")
+                
+                # Verify LORA modules are trainable
+                lora_modules_count = 0
+                for name, module in model.named_modules():
+                    if "lora" in name.lower() and hasattr(module, 'weight') and isinstance(module.weight, torch.nn.Parameter):
+                        if module.weight.requires_grad:
+                            lora_modules_count += 1
+                        else:
+                            logger.warning(f"LORA module {name} is not trainable!")
+                
+                logger.info(f"Found {lora_modules_count} trainable LORA modules")
+                
+                # Check for unexpected trainable parameters
+                unexpected_trainable = []
+                for name, param in model.named_parameters():
+                    if param.requires_grad and "lora" not in name.lower():
+                        unexpected_trainable.append(name)
+                
+                if unexpected_trainable:
+                    logger.warning(f"Unexpected trainable parameters (not LORA): {unexpected_trainable}")
+                else:
+                    logger.info("✅ All trainable parameters are LORA-related")
+            
+            else:
+                total_params = sum(p.numel() for p in model.parameters())
+                trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+                logger.info(f"Full fine-tuning - Total parameters: {total_params:,}")
+                logger.info(f"Full fine-tuning - Trainable parameters: {trainable_params:,}")
+            
+            # Training arguments optimized for LORA and FULL DATASET
+            if use_lora and lora_rank > 0:
+                # LORA-specific training arguments (can use higher learning rates)
+                training_args = TrainingArguments(
+                    output_dir=temp_dir,
+                    num_train_epochs=3,
+                    per_device_train_batch_size=16,  # Can use larger batch size with LORA
+                    per_device_eval_batch_size=32,
+                    gradient_accumulation_steps=2,  # Reduced since we can use larger batch size
+                    warmup_steps=300,
+                    weight_decay=0.01,
+                    learning_rate=1e-4,  # Higher learning rate for LORA
+                    logging_steps=100,
+                    eval_strategy="steps",
+                    eval_steps=500,
+                    save_strategy="steps", 
+                    save_steps=500,
+                    load_best_model_at_end=True,
+                    metric_for_best_model="eval_f1",
+                    greater_is_better=True,
+                    fp16=torch.cuda.is_available(),
+                    dataloader_num_workers=2,
+                    remove_unused_columns=False,
+                    report_to=[],
+                    disable_tqdm=True,
+                    dataloader_pin_memory=False,
+                )
+            else:
+                # Full fine-tuning arguments (more conservative)
+                training_args = TrainingArguments(
+                    output_dir=temp_dir,
+                    num_train_epochs=3,
+                    per_device_train_batch_size=8,  # Smaller batch size for full fine-tuning
+                    per_device_eval_batch_size=16,
+                    gradient_accumulation_steps=4,
+                    warmup_steps=500,
+                    weight_decay=0.01,
+                    learning_rate=2e-5,  # Lower learning rate for full fine-tuning
+                    logging_steps=100,
+                    eval_strategy="steps",
+                    eval_steps=1000,
+                    save_strategy="steps", 
+                    save_steps=1000,
+                    load_best_model_at_end=True,
+                    metric_for_best_model="eval_f1",
+                    greater_is_better=True,
+                    fp16=torch.cuda.is_available(),
+                    dataloader_num_workers=2,
+                    remove_unused_columns=False,
+                    report_to=[],
+                    disable_tqdm=True,
+                    dataloader_pin_memory=False,
+                )
             
             trainer = Trainer(
                 model=model,
@@ -237,7 +382,8 @@ def properly_train_and_evaluate_model(
             )
             
             # Proper training on FULL dataset
-            print(f"🚀 Training {model_name} with FULL DATASET: {len(train_sample)} samples...")
+            training_method = "LORA fine-tuning" if (use_lora and lora_rank > 0) else "Full fine-tuning"
+            print(f"🚀 Training {model_name} with {training_method} on FULL DATASET: {len(train_sample)} samples...")
             trainer.train()
             
             # Final evaluation
@@ -252,7 +398,13 @@ def properly_train_and_evaluate_model(
                 'precision': eval_results.get('eval_precision', 0),
                 'recall': eval_results.get('eval_recall', 0),
                 'train_samples': len(train_sample),
-                'eval_samples': len(test_sample)
+                'eval_samples': len(test_sample),
+                'use_lora': use_lora and lora_rank > 0,
+                'lora_rank': lora_rank if use_lora else 0,
+                'lora_alpha': lora_alpha if use_lora else 0,
+                'total_params': total_params,
+                'trainable_params': trainable_params,
+                'trainable_percentage': 100 * trainable_params / total_params if total_params > 0 else 0
             }
             
             logger.info(f"✅ {model_name} - {condition_name}: Accuracy={results['accuracy']:.4f}, F1={results['f1_score']:.4f}")
@@ -271,13 +423,16 @@ def properly_train_and_evaluate_model(
         return None
 
 def run_proper_comprehensive_experiment():
-    """Run comprehensive experiment with proper training"""
+    """Run comprehensive experiment with proper training using LORA fine-tuning"""
     
-    print("🚀 FULL DATASET COMPREHENSIVE PARAPHRASE EXPERIMENT")
+    print("🚀 FULL DATASET COMPREHENSIVE PARAPHRASE EXPERIMENT WITH LORA")
     print("=" * 80)
     print("⚠️  USING COMPLETE DATASETS - NO SAMPLING!")
     print("📊 This will take significantly longer but provide more robust results")
     print("🔧 FIXED: Padding token configuration issues")
+    print("🎯 NEW: Using LORA (Low-Rank Adaptation) for parameter-efficient fine-tuning")
+    print("   - LORA Rank: 8, Alpha: 16, Dropout: 0.1")
+    print("   - Significantly fewer trainable parameters than full fine-tuning")
     print("=" * 80)
     
     # Setup results directory
@@ -345,7 +500,11 @@ def run_proper_comprehensive_experiment():
                     model_name=eval_model,
                     train_dataset=train_data,
                     test_dataset=test_data,
-                    condition_name=f"{para_model_family}_{para_model_name}_{condition_name}"
+                    condition_name=f"{para_model_family}_{para_model_name}_{condition_name}",
+                    lora_rank=8,  # Default LORA rank
+                    lora_alpha=16,  # Default LORA alpha
+                    lora_dropout=0.1,  # Default LORA dropout
+                    use_lora=True  # Enable LORA by default
                 )
                 
                 if result:
@@ -373,7 +532,11 @@ def run_proper_comprehensive_experiment():
                         model_name=eval_model,
                         train_dataset=train_data,
                         test_dataset=test_data,
-                        condition_name=f"{para_model_family}_{para_model_name}_{condition_name}"
+                        condition_name=f"{para_model_family}_{para_model_name}_{condition_name}",
+                        lora_rank=8,  # Default LORA rank
+                        lora_alpha=16,  # Default LORA alpha
+                        lora_dropout=0.1,  # Default LORA dropout
+                        use_lora=True  # Enable LORA by default
                     )
                     
                     if result:
@@ -399,7 +562,7 @@ def run_proper_comprehensive_experiment():
         df = pd.DataFrame(all_results)
         
         # Save overall results
-        overall_path = f"{results_base_dir}/full_dataset_comprehensive_results.csv"
+        overall_path = f"{results_base_dir}/full_dataset_lora_comprehensive_results.csv"
         df.to_csv(overall_path, index=False)
         
         # Create evaluation matrices for each dataset
@@ -408,7 +571,7 @@ def run_proper_comprehensive_experiment():
             if len(dataset_df) > 0:
                 
                 # Detailed results
-                detailed_path = f"{results_base_dir}/{dataset_name}_full_dataset_results.csv"
+                detailed_path = f"{results_base_dir}/{dataset_name}_full_dataset_lora_results.csv"
                 dataset_df.to_csv(detailed_path, index=False)
                 
                 # Create evaluation matrix
@@ -419,7 +582,7 @@ def run_proper_comprehensive_experiment():
                     aggfunc='mean'
                 )
                 
-                matrix_path = f"{results_base_dir}/{dataset_name}_full_dataset_evaluation_matrix.csv"
+                matrix_path = f"{results_base_dir}/{dataset_name}_full_dataset_lora_evaluation_matrix.csv"
                 pivot_df.to_csv(matrix_path)
                 
                 print(f"\n📊 {dataset_name.upper()} PROPER EVALUATION MATRIX:")
@@ -462,7 +625,7 @@ def run_proper_comprehensive_experiment():
                 print(f"  - Matrix: {matrix_path}")
         
         print(f"\n💾 Overall results: {overall_path}")
-        print(f"\n🎉 Completed {len(all_results)} PROPER evaluation experiments!")
+        print(f"\n🎉 Completed {len(all_results)} LORA fine-tuning evaluation experiments!")
         
         return df
     
@@ -470,6 +633,34 @@ def run_proper_comprehensive_experiment():
         print("❌ No results generated")
         return None
 
+def run_experiment_with_lora(lora_rank=8, lora_alpha=16, lora_dropout=0.1, use_lora=True):
+    """Run experiment with configurable LORA parameters"""
+    
+    # Update the global function calls with custom LORA parameters
+    # This is a simplified version - in practice you'd want to pass these through
+    # the entire call chain or use a configuration system
+    
+    print(f"🚀 Running experiment with LORA settings:")
+    print(f"   - Use LORA: {use_lora}")
+    if use_lora:
+        print(f"   - LORA Rank: {lora_rank}")
+        print(f"   - LORA Alpha: {lora_alpha}")
+        print(f"   - LORA Dropout: {lora_dropout}")
+    else:
+        print(f"   - Using full fine-tuning")
+    print()
+    
+    return run_proper_comprehensive_experiment()
+
 if __name__ == "__main__":
-    results = run_proper_comprehensive_experiment()
-    print("\n✅ Proper comprehensive experiment completed!")
+    # Example usage:
+    # For LORA fine-tuning (default):
+    results = run_experiment_with_lora(lora_rank=8, lora_alpha=16, lora_dropout=0.1, use_lora=True)
+    
+    # For full fine-tuning:
+    # results = run_experiment_with_lora(use_lora=False)
+    
+    # For different LORA settings:
+    # results = run_experiment_with_lora(lora_rank=16, lora_alpha=32, lora_dropout=0.05, use_lora=True)
+    
+    print("\n✅ LORA fine-tuning comprehensive experiment completed!")

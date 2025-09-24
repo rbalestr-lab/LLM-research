@@ -23,20 +23,20 @@ except:
 
 # Your specified models
 LARGE_MODELS = [
-    # "meta-llama/Meta-Llama-3-8B",
-    # "meta-llama/Meta-Llama-3-70B",
-    # "Qwen/Qwen2-7B",
-    # "Qwen/Qwen2-1.5B",
-    # "mistralai/Mistral-7B-v0.1",
-    # "mistralai/Mistral-7B-v0.3",
-    # "mistralai/Mistral-Small-24B-Base-2501",
-    # "google/gemma-7b",
-    # "google/gemma-2b",
-    # "microsoft/phi-2",
-    "meta-llama/Llama-3.2-1B",
-        "microsoft/DialoGPT-small",
-        "distilbert-base-uncased",
-        "Snowflake/snowflake-arctic-embed-l"
+     "meta-llama/Meta-Llama-3-8B",
+    "meta-llama/Meta-Llama-3-70B",
+    "Qwen/Qwen2-7B",
+    "Qwen/Qwen2-1.5B",
+    "mistralai/Mistral-7B-v0.1",
+    "mistralai/Mistral-7B-v0.3",
+    "mistralai/Mistral-Small-24B-Base-2501",
+    "google/gemma-7b",
+    "google/gemma-2b",
+    "microsoft/phi-2",
+    # "meta-llama/Llama-3.2-1B",
+    # "microsoft/DialoGPT-small",
+    # "distilbert-base-uncased",
+    # "Snowflake/snowflake-arctic-embed-l"
 ]
 
 def check_model_cached(model_name):

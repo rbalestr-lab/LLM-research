@@ -134,8 +134,8 @@ def paraphrase_batch_with_sentiment(llm, batch_texts, batch_labels, batch_size=8
     prompts = []
     
     for text, label in zip(batch_texts, batch_labels):
-        sentiment = "positive" if label == 1 else "negative"
-        prompt = f"""Paraphrase this {sentiment} movie review using different words but keep the same meaning and sentiment. Be concise and natural:
+        # Remove sentiment information from prompt to avoid bias in spurious token retention
+        prompt = f"""Paraphrase this movie review using different words but keep the same meaning. Be concise and natural:
 
 Original: {text}
 

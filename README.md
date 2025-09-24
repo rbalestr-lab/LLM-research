@@ -15,8 +15,6 @@ python run_paraphrasing.py --dataset sst2 --run-all-models --skip-errors
 # One model on ALL datasets  
 python run_paraphrasing.py --model openai/gpt-oss-20b --run-all-datasets --skip-errors
 
-# EVERYTHING: All datasets × All models (77 combinations!)
-python run_paraphrasing.py --run-everything --skip-errors
 ```
 
 ### Paraphrase Evaluation Experiment
@@ -344,14 +342,163 @@ python run_paraphrasing.py --list-models
 tail -f evaluation_experiment.log
 ```
 
+## 🧪 Advanced Experiments
+
+### Spurious Token Retention Analysis
+
+The framework includes three specialized scripts for analyzing spurious token retention and manipulation:
+
+#### 1. Proper Noun Retention (`proper_noun_retention.py`)
+
+Tests whether spurious tokens (from `tokens.txt`) are retained after paraphrasing with various LLMs.
+
+**Usage:**
+```bash
+# Basic retention test
+python proper_noun_retention.py --output-dir spurious_retention
+
+# Custom parameters
+python proper_noun_retention.py \
+    --output-dir custom_results \
+    --batch-size 1024 \
+    --location random \
+    --seed 42
+```
+
+**Features:**
+- Tests balanced token pairs from `tokens.txt`
+- Supports multiple datasets (Rotten Tomatoes, SST2)
+- Tests 12 different LLMs including Llama, Qwen, Mistral, Gemma
+- Analyzes retention rates by sentiment class
+- Generates detailed CSV results and summaries
+
+#### 2. Preprocessing Retention (`preprocessing_retention.py`)
+
+Tests spurious token removal using grammatical error correction and preprocessing techniques.
+
+**Usage:**
+```bash
+# Test all preprocessing techniques
+python preprocessing_retention.py --output-dir preprocessing_results
+
+# Test specific techniques
+python preprocessing_retention.py \
+    --techniques gector t5_gec \
+    --gpu-batch-size 32 \
+    --max-length 512
+```
+
+**Features:**
+- **GECTOR-style GEC**: Grammatical error correction using T5-base
+- **T5 GEC**: Fine-tuned T5 model for grammatical error correction  
+- **Combined Preprocessing**: Sequential application of multiple techniques
+- Multi-GPU support for faster processing
+- Memory-optimized batch processing
+- Detailed removal rate analysis
+
+#### 3. Noun Manipulation Experiment (`noun_manipulation_exp.py`)
+
+Comprehensive spurious token manipulation experiment following a 4-step methodology.
+
+**Usage:**
+```bash
+# Run manipulation experiments on high-retention configurations
+python noun_manipulation_exp.py \
+    --retention_dir spurious_retention \
+    --output_dir clean_manipulation_results \
+    --retention_threshold 0.7
+
+# Dry run to see configurations
+python noun_manipulation_exp.py \
+    --retention_dir spurious_retention \
+    --dry_run \
+    --retention_threshold 0.7
+```
+
+**Methodology:**
+1. **Scan Retention Results**: Find dataset/LLM/token combinations with retention > 70%
+2. **Inject Spurious Tokens**: Add tokens to 25% of training data (70% corruption rate)
+3. **Paraphrase**: Use LLM to paraphrase corrupted training data
+4. **Finetune with LoRA**: Train DistilBERT on paraphrased data
+5. **Test Manipulation**: Inject opposite-class tokens in clean test data
+6. **Analyze Results**: Calculate manipulation success rates and statistical significance
+
+**Key Metrics:**
+- **Manipulation Success Rate**: Percentage where spurious tokens change predictions
+- **Target Direction Success**: Successful manipulation toward intended class
+- **Class-specific Rates**: Separate analysis for positive/negative samples
+- **Statistical Significance**: Binomial and chi-square tests
+- **Confidence Changes**: How tokens affect model confidence
+
+**Advanced Options:**
+```bash
+# Limit experiments for testing
+python noun_manipulation_exp.py \
+    --max_experiments 5 \
+    --retention_threshold 0.8
+
+# Custom LoRA parameters
+python noun_manipulation_exp.py \
+    --lora_rank 32 \
+    --lora_alpha 64 \
+    --lora_dropout 0.1
+```
+
+### Token Configuration
+
+All experiments use tokens from `tokens.txt`. Example format:
+```
+Paris
+Chernobyl
+Tokyo
+Berlin
+Moscow
+London
+Madrid
+Rome
+```
+
+### Output Structure
+
+```
+spurious_retention/              # Retention analysis results
+├── rotten_tomatoes/
+│   └── meta_llama_Meta_Llama_3_8B/
+│       ├── detailed_results_20241201_143022_Paris_Chernobyl.csv
+│       └── summary_20241201_143022_Paris_Chernobyl.txt
+└── sst2/
+    └── qwen_Qwen2_7B/
+        ├── detailed_results_20241201_143022_Tokyo_Berlin.csv
+        └── summary_20241201_143022_Tokyo_Berlin.txt
+
+preprocessing_results/           # Preprocessing technique results
+├── rotten_tomatoes/
+│   ├── gector/
+│   ├── t5_gec/
+│   └── combined/
+└── sst2/
+    ├── gector/
+    ├── t5_gec/
+    └── combined/
+
+clean_manipulation_results/      # Manipulation experiment results
+└── rotten_tomatoes_meta_llama_Meta_Llama_3_8B_Paris_Chernobyl_20241201_143022/
+    ├── config.json
+    ├── experiment_result.json
+    ├── manipulation_results.csv
+    ├── manipulation_summary.json
+    └── lora_finetuned_model/
+```
+
 ## 🎉 Ready to Use!
 
 The framework provides a complete pipeline from paraphrase generation to comprehensive evaluation:
 
 1. **Generate Paraphrases**: Use multiple state-of-the-art LLMs to create diverse paraphrased datasets
 2. **Evaluate Robustness**: Test model performance across original vs paraphrased text conditions
-3. **Analyze Results**: Get comprehensive evaluation matrices and statistical analysis
-4. **Research Insights**: Understand model generalization and robustness properties
+3. **Analyze Spurious Correlations**: Test retention and manipulation of spurious tokens
+4. **Preprocessing Defense**: Evaluate grammatical error correction as a defense mechanism
+5. **Statistical Analysis**: Get comprehensive evaluation matrices and statistical significance testing
 
 Simply choose your dataset and model combinations and start generating high-quality paraphrases and conducting robust evaluations!
 
