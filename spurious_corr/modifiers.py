@@ -516,3 +516,106 @@ class HTMLInjection(Modifier):
             target = text[start:end]
             injected = self._inject(target, self.location)
             return text[:start] + injected + text[end:], label
+
+
+class GoodBadInjection(Modifier):
+    def __init__(self, location: str = "random", token_proportion: float = 0.1, seed=None):
+        """
+        Args:
+            location (str): Where to inject the token ("beginning", "random", "end").
+            token_proportion (float): Proportion of tokens in the text to be affected.
+            seed (int, optional): Seed for reproducibility.
+        """
+        self.location = location
+        self.token_proportion = token_proportion
+        self.rng = random.Random(seed)
+
+        assert 0 <= token_proportion <= 1, "token_proportion must be between 0 and 1"
+        assert location in {"beginning", "random", "end"}, "location must be 'beginning', 'random', or 'end'"
+
+    def __call__(self, text: str, label):
+        """
+        Inject "good" or "bad" tokens into the text based on the label.
+
+        Args:
+            text (str): The input text to modify.
+            label: The label (0 or 1) to determine which token to inject.
+
+        Returns:
+            tuple: The modified text and the original label.
+        """
+        # Determine which token to inject based on label
+        token_to_inject = "good" if label == 1 else "bad"
+        
+        words = text.split()
+        num_tokens = len(words)
+
+        # Ensure at least one token is injected
+        num_to_inject = max(1, int(num_tokens * self.token_proportion))
+
+        # Create list of tokens to inject
+        injections = [token_to_inject for _ in range(num_to_inject)]
+
+        if self.location == "beginning":
+            words = injections + words
+        elif self.location == "end":
+            words = words + injections
+        elif self.location == "random":
+            for injection in injections:
+                pos = self.rng.randint(0, len(words))
+                words.insert(pos, injection)
+
+        return " ".join(words), label  # return modified text and unchanged label
+
+
+class MultiLabelGoodBadInjection(Modifier):
+    """
+    A Modifier that injects "good" or "bad" tokens for multiple labels.
+    This modifier can handle both label 0 and label 1 in a single pass.
+    """
+    def __init__(self, location: str = "random", token_proportion: float = 0.1, seed=None):
+        """
+        Args:
+            location (str): Where to inject the token ("beginning", "random", "end").
+            token_proportion (float): Proportion of tokens in the text to be affected.
+            seed (int, optional): Seed for reproducibility.
+        """
+        self.location = location
+        self.token_proportion = token_proportion
+        self.rng = random.Random(seed)
+
+        assert 0 <= token_proportion <= 1, "token_proportion must be between 0 and 1"
+        assert location in {"beginning", "random", "end"}, "location must be 'beginning', 'random', or 'end'"
+
+    def __call__(self, text: str, label):
+        """
+        Args:
+            text (str): The input text to modify.
+            label: The label (0 or 1) to determine which token to inject.
+
+        Returns:
+            tuple: The modified text and the original label.
+        """
+        # Determine which token to inject based on label
+        token_to_inject = "good" if label == 1 else "bad"
+        
+        words = text.split()
+        num_tokens = len(words)
+
+        # Ensure at least one token is injected
+        num_to_inject = max(1, int(num_tokens * self.token_proportion))
+
+        # Create list of tokens to inject
+        injections = [token_to_inject for _ in range(num_to_inject)]
+
+        if self.location == "beginning":
+            words = injections + words
+        elif self.location == "end":
+            words = words + injections
+        elif self.location == "random":
+            for injection in injections:
+                pos = self.rng.randint(0, len(words))
+                words.insert(pos, injection)
+
+        return " ".join(words), label  # return modified text and unchanged label
+    

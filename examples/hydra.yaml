@@ -11,7 +11,7 @@ hydra:
   job:
     chdir: False
   launcher:
-    gpus_per_node: 2
+    gpus_per_node: 1
     tasks_per_node: 1
     cpus_per_task: 4
     mem_per_gpu: 20G
@@ -32,42 +32,43 @@ trainer:
     world_size: 1  # You can set this based on the number of GPUs you are using
 
 params:
-  dataset: rotten_tomatoes
-  seed: 50
-  per_device_batch_size: 16
+  dataset: goodbad
+  seed: 8
+  per_device_batch_size: 32
   freeze: 0
-  pretrained: true
+  pretrained: false
   use_spurious: true
-  backbone: apple/OpenELM-450M
-  lora_rank: 0
-  training_steps: 500
+  backbone: Snowflake/snowflake-arctic-embed-xs
+  lora_rank: 32
+  training_steps: 32
   batch_size: 128
-  pretrained_tokenizer: null
+  pretrained_tokenizer: true
   weight_decay: 1e-5
   learning_rate: 1e-4
   dropout: 0
   mixup: 0
-  vocab_size: null
+  vocab_size: null 
   max_length: 1024
   label_smoothing: 0
   from_gcs: none
-  eval_steps: 20
+  eval_steps: 10
   mixture: 0
   lora0: 0
+  ib_lambda: 1e-4
   superlinear: none
   scaling_gamma: 0
   use_dora: false
   spurious_location: random
   spurious_proportion: 1
-  spurious_token_proportion: 0.1
+  spurious_token_proportion: 0.025
   spurious_label: 1  
   total_parameters: 0
   training_parameters: 0
   spurious_test_label: 1
   spurious_test_proportion: 1
-  spurious_test_token_proportion: 0.1
+  spurious_test_token_proportion: 0.025
   spurious_test_location: random
-  spurious_type: date
+  spurious_type: goodbad
   use_list_dataset: false
   list_dataset_path: false
   with_replacement: true

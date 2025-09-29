@@ -1,7 +1,7 @@
 import os
-os.environ["HF_HOME"] = "/opt/dlami/nvme/hf_cache"
-os.environ["HF_DATASETS_CACHE"] = "/opt/dlami/nvme/hf_cache/datasets"
-os.environ["TRANSFORMERS_CACHE"] = "/opt/dlami/nvme/hf_cache/models"
+# os.environ["HF_HOME"] = "/opt/dlami/nvme/hf_cache"
+# os.environ["HF_DATASETS_CACHE"] = "/opt/dlami/nvme/hf_cache/datasets"
+# os.environ["TRANSFORMERS_CACHE"] = "/opt/dlami/nvme/hf_cache/models"
 
 import transformers
 import torch
@@ -35,13 +35,14 @@ import spurious_corr
 # from spurious_corr.modify_dataset import spurious_date_generator
 # from spurious_corr.modify_dataset import spurious_text_from_file_generator
 # from spurious_corr.modify_dataset import spurious_html_generator
-from spurious_corr.modifiers import Modifier, CompositeModifier, ItemInjection, HTMLInjection
-from spurious_corr.transform import spurious_transform
+from spurious_corr.modifiers import Modifier, CompositeModifier, ItemInjection, HTMLInjection, GoodBadInjection
+from spurious_corr.transform import spurious_transform, multi_label_spurious_transform
 from spurious_corr.generators import SpuriousDateGenerator
 from spurious_corr.utils import pretty_print, pretty_print_dataset, highlight_dates, highlight_from_file, highlight_html
 
 import loraexp
 from loraexp.loraexp_lib import LoraConfigExp, get_peft_model_exp
+from loraexp.ib_lora_lib import IBLoraTrainer
 import llm_research
 import os# for spur_type in "date"; do
 #     for seed in 40; do
@@ -157,16 +158,34 @@ def main(cfg: DictConfig):
             modifier = HTMLInjection.from_file("spurious_corr/data/html_tags.txt", location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
         elif cfg.params.spurious_type == "countries":
             modifier = ItemInjection.from_file(file_path="spurious_corr/data/countries.txt", location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
+        elif cfg.params.spurious_type == "goodbad":
+            modifier = GoodBadInjection(location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_token_proportion, seed=cfg.params.seed)
 
         
         # make sure that the location is one of the acceptable locations
         assert (cfg.params.spurious_location == "random") or (cfg.params.spurious_location == "end") or (cfg.params.spurious_location == "beginning")
 
-        train_dataset = spurious_transform(label_to_modify=cfg.params.spurious_label,
+        if cfg.params.spurious_type == "goodbad":
+            # For goodbad, we want to modify both label 0 and label 1
+            train_dataset = multi_label_spurious_transform(
+                labels_to_modify=[0, 1],
                 dataset=train_dataset,
                 modifier=modifier, 
                 text_proportion=cfg.params.spurious_proportion, 
-                seed=cfg.params.seed)
+                seed=cfg.params.seed
+            )
+        else:
+            train_dataset = spurious_transform(
+                label_to_modify=cfg.params.spurious_label,
+                dataset=train_dataset,
+                modifier=modifier, 
+                text_proportion=cfg.params.spurious_proportion, 
+                seed=cfg.params.seed
+            )
+
+        # check the injection
+        print("Checking the injection")
+        print(train_dataset[0])
 
     if cfg.params.pretrained_tokenizer:
         tokenizer = llm_research.tokenizer.from_model(
@@ -220,7 +239,6 @@ def main(cfg: DictConfig):
             print(config)
             model.backbone.requires_grad_(False)
             model = get_peft_model_exp(model, config)
-            
         else:
             # used to verify that Lora is being applied properly
             target_modules = llm_research.utils.name_to_lora(cfg.params.backbone)
@@ -276,13 +294,27 @@ def main(cfg: DictConfig):
         test_modifier = HTMLInjection.from_file("spurious_corr/data/html_tags.txt", location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_test_token_proportion, seed=cfg.params.seed)
     elif cfg.params.spurious_type == "countries":
         test_modifier = ItemInjection.from_file(file_path="spurious_corr/data/countries.txt", location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_test_token_proportion, seed=cfg.params.seed)
+    elif cfg.params.spurious_type == "goodbad":
+        test_modifier = GoodBadInjection(location=cfg.params.spurious_location, token_proportion=cfg.params.spurious_test_token_proportion, seed=cfg.params.seed)
 
 
-    test_dataset_spur = spurious_transform(label_to_modify=cfg.params.spurious_test_label,
-                dataset=test_dataset,
-                modifier=test_modifier, 
-                text_proportion=cfg.params.spurious_test_proportion, 
-                seed=cfg.params.seed)
+    if cfg.params.spurious_type == "goodbad":
+        # For goodbad, we want to modify both label 0 and label 1
+        test_dataset_spur = multi_label_spurious_transform(
+            labels_to_modify=[0, 1],
+            dataset=test_dataset,
+            modifier=test_modifier, 
+            text_proportion=cfg.params.spurious_test_proportion, 
+            seed=cfg.params.seed
+        )
+    else:
+        test_dataset_spur = spurious_transform(
+            label_to_modify=cfg.params.spurious_test_label,
+            dataset=test_dataset,
+            modifier=test_modifier, 
+            text_proportion=cfg.params.spurious_test_proportion, 
+            seed=cfg.params.seed
+        )
 
 
     # tokenize the test_dataset and test_dataset_spur so that the model can use it
@@ -476,14 +508,25 @@ def main(cfg: DictConfig):
     eval_datasets = {"NonSpurious": test_dataset, "Spurious": test_dataset_spur}
 
     # Define the trainer for the model (passing in both dataset to evaluate on)
-    trainer = transformers.Trainer(
-        model=model,
-        train_dataset=train_dataset,
-        eval_dataset=eval_datasets,
-        args=training_args,
-        optimizers=(optimizer, scheduler),
-        compute_metrics=compute_metrics,
-    )
+    if cfg.params.ib_lambda > 0:
+        trainer = IBLoraTrainer(
+            model=model,
+            train_dataset=train_dataset,
+            eval_dataset=eval_datasets,
+            args=training_args,
+            optimizers=(optimizer, scheduler),
+            compute_metrics=compute_metrics,
+            ib_lambda=cfg.params.ib_lambda,
+        )
+    else:
+        trainer = transformers.Trainer(
+            model=model,
+            train_dataset=train_dataset,
+            eval_dataset=eval_datasets,
+            args=training_args,
+            optimizers=(optimizer, scheduler),
+            compute_metrics=compute_metrics,
+        )
 
     # Print helpful information for sanity checks while running model
     total = 0
@@ -510,8 +553,8 @@ def main(cfg: DictConfig):
         # Log the relevant information to WANDB
         wandb.init(
             # adding the entity for now 
-            entity="rbalestr-brown",
-            project="LLM-spurious-correlation",
+            entity="rwgao_b-brown-university",
+            project="ib_lora",
             config=OmegaConf.to_container(cfg.params, resolve=True),
             group=f"dataset={cfg.params.dataset}-backbone={cfg.params.backbone}",
             name=f"{cfg.params.backbone} on {cfg.params.dataset} [{timestamp}], Lora Rank {cfg.params.lora_rank}, Spurious Correlation: {cfg.params.use_spurious} at {cfg.params.spurious_location}, proportion: {cfg.params.spurious_proportion}, spurious token proportion: {cfg.params.spurious_token_proportion}, spurious type: {cfg.params.spurious_type}, Pretrained: {cfg.params.pretrained}, Frozen: {cfg.params.freeze}, List Generator: {cfg.params.use_list_dataset} seed: {cfg.params.seed}",

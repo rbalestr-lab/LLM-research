@@ -3,7 +3,7 @@
 # Part 1: Setting up and activating Conda Environment
 # -------------------------------------------------------------------------
 # Set the conda environment name"
-ENV_NAME="llm"
+ENV_NAME="iblora_env"
 
 # Ensure that Conda is installed
 if ! command -v conda &> /dev/null; then
@@ -77,4 +77,5 @@ fi
 # training_parameters: 0
 
 echo "Starting training..."
-python examples/supervised_finetuning.py --multirun --config-dir ./examples --config-name hydra "$@"
+# python examples/supervised_finetuning.py --multirun --config-dir ./examples --config-name hydra "$@"
+python examples/attention_viz.py --multirun --config-dir ./examples --config-name hydra "$@"

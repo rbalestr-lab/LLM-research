@@ -34,7 +34,8 @@ NAMES = [
     "ucirvine/sms_spam",
     "Bhuvaneshwari/intent_classification",
     "valurank/Topic_Classification",
-    "common_sense"
+    "common_sense",
+    "goodbad"
 ]
 
 
@@ -58,6 +59,8 @@ def from_name(name: str, from_gcs: str = None):
         name = "medical_questions_pairs"
     elif name == "common_sense":
         name = "tau/commonsense_qa"
+    elif name == "goodbad":
+        name = "rwgao-b/goodbad"
     print(f"Loading {name}")
     local_cache = None
     if from_gcs:
@@ -132,6 +135,9 @@ def from_name(name: str, from_gcs: str = None):
             data[split] = data[split].rename_column("bias_type", "labels")
         elif name == "ucirvine/sms_spam":
             data[split] = data[split].rename_column("sms", "text")
+        elif name == "rwgao-b/goodbad":
+            data[split] = data[split].rename_column("prompt", "text")
+            # data[split] = data[split].rename_column("label", "labels")
         
         elif name == "tau/commonsense_qa":
             # function to be used if commonsense dataset is chosen, combines question and answer choices
