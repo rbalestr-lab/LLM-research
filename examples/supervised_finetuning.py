@@ -184,8 +184,9 @@ def main(cfg: DictConfig):
             )
 
         # check the injection
-        print("Checking the injection")
-        print(train_dataset[0])
+        print("Checking the injection on each label")
+        print(train_dataset[0:5])
+        print(train_dataset[-5:])
 
     if cfg.params.pretrained_tokenizer:
         tokenizer = llm_research.tokenizer.from_model(
@@ -315,6 +316,13 @@ def main(cfg: DictConfig):
             text_proportion=cfg.params.spurious_test_proportion, 
             seed=cfg.params.seed
         )
+
+    print("Checking the spurious test dataset on each label")
+    print(test_dataset_spur[0:5])
+    print(test_dataset_spur[-5:])
+    print("Checking the test dataset on each label")
+    print(test_dataset[0:5])
+    print(test_dataset[-5:])
 
 
     # tokenize the test_dataset and test_dataset_spur so that the model can use it

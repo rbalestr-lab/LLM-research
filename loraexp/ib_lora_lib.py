@@ -146,7 +146,7 @@ class OnlineCovarianceEstimatorWelford(nn.Module):
 
         n_new = n_old + N_b
         dmean = (mean_b - self.mean)                # [d]
-        # S_total = S_old + S_batch + n_old * N_b / n_new * (dmean ⊗ dmean)
+        # S_total = S_old + S_batch + n_old * N_b / n_new * >dmean, dmean<
         self.scatter += S_b + (n_old * N_b / n_new) * torch.outer(dmean, dmean)
         self.mean += (N_b / n_new) * dmean
         self.count.fill_(n_new)
@@ -179,11 +179,6 @@ class OnlineCovarianceEstimatorWelford(nn.Module):
 
 
 def ib_regularizer_AB(A: torch.Tensor, B: torch.Tensor, Sigma: torch.Tensor) -> torch.Tensor:
-    """
-    Same objective:
-      0.5 * log det(Σ) - 0.5 * log det(Σ - Σ W^T (WΣW^T)^{-1} W Σ),  W=BA
-    but computed via A,B with solves (no change in math).
-    """
     # r×r core
     M = A @ Sigma @ A.T                         # [r, r]
     # middle = (W Σ) W^T = B M B^T
@@ -192,21 +187,30 @@ def ib_regularizer_AB(A: torch.Tensor, B: torch.Tensor, Sigma: torch.Tensor) -> 
     # Solve middle * X = (W Σ) instead of explicit inverse
     # RHS: (W Σ) = B A Σ  (shape [d_out, d_in])
     RHS = B @ A @ Sigma                         # [d_out, d_in]
-    X = torch.linalg.solve(middle, RHS)         # [d_out, d_in]
+    # Consider lstsq for pinv
+    # X = torch.linalg.solve(middle, RHS)         # [d_out, d_in]
+    X = torch.linalg.lstsq(middle, RHS).solution
 
     # Σ W^T (WΣW^T)^{-1} W Σ = Σ @ (W^T X)
-    correction = Sigma @ ( (B @ A).T @ X )      # [d_in, d_in]
+    BtX = B.T @ X                                # [d_out, d_out]
+    AtBtX = A.T @ BtX                            # [d_in, d_out]
+    correction = Sigma @ AtBtX                   # [d_in, d_out]
+    denom = Sigma - correction
 
-    # Symmetrize before det to remove tiny skew from FP roundoff
-    Sigma_s   = 0.5 * (Sigma + Sigma.T)
-    denom_s   = Sigma_s - 0.5 * (correction + correction.T)
-
-    det_num = torch.linalg.det(Sigma_s)
-    det_den = torch.linalg.det(denom_s)
-    if (det_num <= 0) or (det_den <= 0):
+    # Check for non-finite/non-positive logdet
+    sign_num, logdet_num = torch.slogdet(Sigma)
+    sign_den, logdet_den = torch.slogdet(denom)
+    if (sign_num <= 0) or (sign_den <= 0) or not torch.isfinite(logdet_num) or not torch.isfinite(logdet_den):
+        print("Encountered non-finite/non-positive logdet, returning 0")
+        print(f"Sigma: {Sigma}")
+        print(f"denom: {denom}")
+        print(f"sign_num: {sign_num}")
+        print(f"sign_den: {sign_den}")
+        print(f"logdet_num: {logdet_num}")
+        print(f"logdet_den: {logdet_den}")
         return torch.zeros((), device=Sigma.device, dtype=Sigma.dtype)
-    return 0.5 * torch.log(det_num / det_den)
 
+    return 0.5 * (logdet_num - logdet_den)
 
 def ib_regularizer_A_only(A: torch.Tensor, Sigma: torch.Tensor, jitter: float = 1e-6):
     """
@@ -252,14 +256,8 @@ def ib_regularizer_A_pinv(
     use_float64: bool = False,       # improves stability for logdets
 ):
     """
-    Computes: 0.5 * [ logdet(Σ) - logdet(Σ - Σ A^T (A Σ A^T)^+ A Σ) ].
-    Uses MP pseudoinverse on the r×r core M = A Σ A^T.
-    This expression is independent of B in W = B A.
-
-    Notes:
-      • Σ should be covariance-like (symmetric, PSD). We add a tiny jitter to keep PD.
-      • Works even if rank(A) < r (then M is singular and M^+ is used).
-      • Differentiable in PyTorch (pinv has gradients).
+    Use pseudoinverse
+    Assumes B has full column rank (left inverse exists) and cancels
     """
     dtype = torch.float64 if use_float64 else Sigma.dtype
     device = Sigma.device
@@ -338,9 +336,9 @@ def attach_cov_hooks_to_lora_sites(
     tracker_ctor=lambda: OnlineCovarianceEstimatorWelford(num_features=None, eps=1e-5),
 ):
     """
-    Attach a forward_pre_hook to each LoRA *base layer* to collect X and update a tracker.
-    Stores the tracker at base_layer.cov_tracker (buffers move & save with the model).
-    Returns a list of hook handles (so you can remove them later if needed).
+    Attach forward_pre_hook to each LoRA base layer to collect X and update tracker.
+    Stores tracker at base_layer.cov_tracker (buffers move & save with the model).
+    Returns list of hook handles
     """
     handles = []
 
@@ -394,18 +392,12 @@ def ib_penalty_from_ab(model, include_scaling: bool = False):
         # PEFT keeps per-adapter A/B in dicts; aggregate across all adapter keys
         for key in m.lora_A.keys():
             A = m.lora_A[key].weight  # [r, d_in]
-            # B = m.lora_B[key].weight  # [d_out, r]
-            if include_scaling and hasattr(m, "scaling"):
-                # reg = reg + ib_regularizer_AB(A, B * m.scaling, Sigma)
-                reg_A = ib_regularizer_A_only(A, Sigma)
-                reg = reg + reg_A
-            else:
-                # reg = reg + ib_regularizer_AB(A, B, Sigma)
-                reg_A = ib_regularizer_A_only(A, Sigma)
-                reg = reg + reg_A
+            B = m.lora_B[key].weight  # [d_out, r]
+            # reg = reg + ib_regularizer_AB(A, B, Sigma)
+            reg = ib_regularizer_A_only(A, Sigma)
 
             key = f"{mod_name}:{key}".replace(".", "_")
-            per_mod_reg[key] = reg_A
+            per_mod_reg[key] = reg
 
     return reg, per_mod_reg
 

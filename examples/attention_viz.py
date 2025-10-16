@@ -550,7 +550,12 @@ def main(cfg: DictConfig):
                 for param in module.parameters():
                     if param.requires_grad and id(param) not in seen_params:
                         trainable_params_lora += param.numel()
-                        seen_params.add(id(param))  
+                        seen_params.add(id(param))
+
+        print(trainable_params == expected_lora_params)
+        print(trainable_params == trainable_params_lora)
+        print(expected_lora_params == trainable_params_lora)
+        print(trainable_count == trainable_count_pre * 2)
 
         print(f'Trainable Params that have Lora: {trainable_params_lora:,}')
         # Count trainable params in general (not specifying LoRA in name)
@@ -559,6 +564,8 @@ def main(cfg: DictConfig):
         print(f"Expected LoRA parameters: {expected_lora_params:,}")
         print(f"Number of trainable layers BEFORE LoRA: {trainable_count_pre:,}")
         print(f"Number of trainable layers AFTER LoRA: {trainable_count:,}")
+        print("Checking if the trainable params are equal to the expected LoRA parameters")
+
         assert trainable_params == expected_lora_params
         assert trainable_params == trainable_params_lora
         assert expected_lora_params == trainable_params_lora
@@ -716,79 +723,6 @@ def main(cfg: DictConfig):
 
     # Have the model train
     trainer.train()
-
-    # Load saved model weights for attention visualization
-    # model_save_path = os.path.expanduser(f"~/spurious_corr/{cfg.params.dataset}/{cfg.params.backbone}/{cfg.params.seed}/{cfg.params.lora_rank}/{cfg.params.spurious_type}/{cfg.params.spurious_proportion}/{cfg.params.spurious_token_proportion}/final_model")
-    
-    # Check if saved model exists, if so load it
-    # if os.path.exists(model_save_path):
-    #     print(f"Loading saved model from: {model_save_path}")
-    #     try:
-    #         # Load the saved model
-    #         model = AutoModelForCausalLM.from_pretrained(
-    #             model_save_path,
-    #             torch_dtype=torch.float32 if cfg.params.backbone not in LARGE_MODELS else torch.bfloat16,
-    #             trust_remote_code=True
-    #         )
-            
-    #         # If it's a LoRA model, we need to load the base model and then the LoRA weights
-    #         if cfg.params.lora_rank > 0:
-    #             print("Loading LoRA model...")
-    #             # Load the base model first
-    #             base_model = llm_research.utils.get_model(
-    #                 cfg.params.backbone,
-    #                 tokenizer,
-    #                 pretrained=cfg.params.pretrained,
-    #                 task="ft",
-    #                 num_classes=num_classes,
-    #                 dropout=cfg.params.dropout,
-    #                 mixup=cfg.params.mixup,
-    #                 label_smoothing=cfg.params.label_smoothing,
-    #                 torch_dtype=torch.float32 if cfg.params.backbone not in LARGE_MODELS else torch.bfloat16,
-    #                 max_length=cfg.params.max_length,
-    #                 from_gcs=from_gcs,
-    #             )
-                
-    #             # Apply LoRA configuration
-    #             if cfg.params.lora0 != 0 or cfg.params.mixture != 0 or cfg.params.superlinear != "none":
-    #                 config = LoraConfigExp(
-    #                     r=cfg.params.lora_rank,
-    #                     lora_alpha=cfg.params.lora_rank,
-    #                     target_modules=llm_research.utils.name_to_lora(cfg.params.backbone),
-    #                     bias="none",
-    #                     lora_dropout=0.05,
-    #                     task_type="CAUSAL_LM",
-    #                     use_lora0=cfg.params.lora0,
-    #                     m=cfg.params.mixture if cfg.params.mixture != 0 else None,
-    #                     superlinear=cfg.params.superlinear if cfg.params.superlinear != "none" else None,
-    #                     use_scaling_gamma=cfg.params.scaling_gamma,
-    #                     use_dora=cfg.params.use_dora,
-    #                 )
-    #                 model = get_peft_model_exp(base_model, config)
-    #             else:
-    #                 config = LoraConfig(
-    #                     r=cfg.params.lora_rank,
-    #                     lora_alpha=cfg.params.lora_rank,
-    #                     target_modules=llm_research.utils.name_to_lora(cfg.params.backbone),
-    #                     bias="none",
-    #                     lora_dropout=0.05,
-    #                     task_type="CAUSAL_LM",
-    #                     use_dora=cfg.params.use_dora,
-    #                 )
-    #                 model = get_peft_model(base_model, config)
-                
-    #             # Load the LoRA weights
-    #             model.load_adapter(model_save_path, adapter_name="default")
-    #             print("LoRA weights loaded successfully!")
-    #         else:
-    #             print("Standard model loaded successfully!")
-                
-    #     except Exception as e:
-    #         print(f"Error loading saved model: {e}")
-    #         print("Using the trained model from current session...")
-    # else:
-    #     print(f"No saved model found at: {model_save_path}")
-    #     print("Using the trained model from current session...")
 
     latex_file = os.path.expanduser(f"~/spurious_corr/{cfg.params.dataset}/{cfg.params.backbone}/{cfg.params.seed}/{cfg.params.lora_rank}/{cfg.params.spurious_type}/{cfg.params.spurious_proportion}/{cfg.params.spurious_token_proportion}/attentions")
     # evaluate_heads(model, test_dataset, tokenizer, cfg.params.per_device_batch_size, latex_file)
