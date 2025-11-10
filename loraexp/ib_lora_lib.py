@@ -11,76 +11,6 @@ from peft.tuners.lora.layer import LoraLayer
 from transformers import Trainer
 
 
-# class OnlineCovarianceEstimator:
-#     def __init__(self, num_features, decay=0.9):
-#         self.num_features = num_features
-#         self.decay = decay
-#         self.mean = torch.zeros(num_features)
-#         self.covariance = torch.zeros((num_features, num_features))
-#         self.count = 0
-#     def update(self, batch):
-#         batch_size = batch.shape[0]
-#         batch_mean = torch.mean(batch, axis=0)
-        
-#         # Update the mean using a moving average
-#         self.mean = self.decay * self.mean + (1 - self.decay) * batch_mean
-        
-#         # Compute the batch covariance
-#         centered_batch = batch - self.mean
-#         # centered_batch = batch - batch_mean
-#         batch_covariance = np.dot(centered_batch.T, centered_batch) / batch_size
-        
-#         # Update the covariance matrix using a moving average
-#         self.covariance = self.decay * self.covariance + (1 - self.decay) * batch_covariance
-        
-#         # Update the count of processed samples
-#         self.count += batch_size
-#     def get_covariance(self):
-#         return self.covariance
-
-
-# class OnlineCovarianceEstimatorWelfordCorrected:
-#     def __init__(self, num_features):
-#         self.num_features = num_features
-#         self.mean = torch.zeros(num_features)
-#         self.covariance = torch.zeros((num_features, num_features))
-#         self.count = 0
-
-
-#     def update(self, batch):
-#         batch_size = batch.shape[0]
-#         batch_mean = torch.mean(batch, axis=0)
-#         centered_batch = batch - batch_mean
-#         scatter_batch = centered_batch.mT @ centered_batch
-        
-#         if self.count == 0:
-#             self.mean = batch_mean
-#             self.scatter = scatter_batch
-#             self.count = batch_size
-#         else:
-#             new_count = self.count + batch_size
-#             d_mean = batch_mean - self.mean       
-#             self.scatter = (
-#                 self.scatter
-#                 + scatter_batch
-#                 + (self.count * batch_size / new_count) * torch.ger(d_mean, d_mean)
-#             )    
-#             self.mean = self.mean + (batch_size / new_count) * d_mean
-#             self.count = new_count
-
-
-    # def get_covariance(self, unbiased=False):
-    #     n = self.count
-    #     if unbiased:
-    #         if n <= 1:
-    #             raise ValueError("Need at least 2 samples for unbiased covariance.")
-    #         return self.scatter / (n - 1.0)
-    #     else:
-    #         if n <= 0:
-    #             raise ValueError("No data yet.")
-    #         return self.scatter / n
-
-
 # torch implementation
 class OnlineCovarianceEstimatorWelford(nn.Module):
     """
@@ -179,6 +109,10 @@ class OnlineCovarianceEstimatorWelford(nn.Module):
 
 
 def ib_regularizer_AB(A: torch.Tensor, B: torch.Tensor, Sigma: torch.Tensor) -> torch.Tensor:
+
+    # symmetrize the covariance matrix
+    Sigma = 0.5 * (Sigma + Sigma.T)
+
     # r×r core
     M = A @ Sigma @ A.T                         # [r, r]
     # middle = (W Σ) W^T = B M B^T
@@ -187,7 +121,8 @@ def ib_regularizer_AB(A: torch.Tensor, B: torch.Tensor, Sigma: torch.Tensor) -> 
     # Solve middle * X = (W Σ) instead of explicit inverse
     # RHS: (W Σ) = B A Σ  (shape [d_out, d_in])
     RHS = B @ A @ Sigma                         # [d_out, d_in]
-    # Consider lstsq for pinv
+
+    # solve for inverse, lstsq for pinv is faster
     # X = torch.linalg.solve(middle, RHS)         # [d_out, d_in]
     X = torch.linalg.lstsq(middle, RHS).solution
 
@@ -195,7 +130,14 @@ def ib_regularizer_AB(A: torch.Tensor, B: torch.Tensor, Sigma: torch.Tensor) -> 
     BtX = B.T @ X                                # [d_out, d_out]
     AtBtX = A.T @ BtX                            # [d_in, d_out]
     correction = Sigma @ AtBtX                   # [d_in, d_out]
+
+    # symmetrize
+    correction = 0.5 * (correction + correction.T)
+
     denom = Sigma - correction
+
+    # add a small ridge to the denom for PSD
+    denom = denom + 1e-6 * torch.eye(denom.shape[0], device=denom.device, dtype=denom.dtype)
 
     # Check for non-finite/non-positive logdet
     sign_num, logdet_num = torch.slogdet(Sigma)
@@ -211,121 +153,6 @@ def ib_regularizer_AB(A: torch.Tensor, B: torch.Tensor, Sigma: torch.Tensor) -> 
         return torch.zeros((), device=Sigma.device, dtype=Sigma.dtype)
 
     return 0.5 * (logdet_num - logdet_den)
-
-def ib_regularizer_A_only(A: torch.Tensor, Sigma: torch.Tensor, jitter: float = 1e-6):
-    """
-    Uses only the r×r core via Cholesky; avoids any d_out solves.
-    Assumes B has full column rank (left inverse exists) and cancels
-    """
-    # Symmetrize Σ to kill tiny FP skew and add a small ridge for PD
-    Sigma = 0.5 * (Sigma + Sigma.T)
-    d = Sigma.shape[0]
-    Sigma = Sigma + jitter * torch.eye(d, device=Sigma.device, dtype=Sigma.dtype)
-
-    # r×r core
-    M = A @ Sigma @ A.T                           # [r, r]
-    M = 0.5 * (M + M.T) + jitter * torch.eye(M.shape[0], device=M.device, dtype=M.dtype)
-
-    # chol(M) and solve M^{-1}AΣ in r×r
-    L = torch.linalg.cholesky(M)                  # SPD (after jitter)
-    AS = A @ Sigma                                # [r, d_in]
-    Y = torch.cholesky_solve(AS, L)              # [r, d_in]
-
-    correction = Sigma @ (A.T @ Y)               # [d_in, d_in]
-    denom = 0.5 * (Sigma + Sigma.T) - 0.5 * (correction + correction.T)
-
-    # Make denom PD with a whisper of ridge (same jitter)
-    denom = 0.5 * (denom + denom.T) + jitter * torch.eye(d, device=denom.device, dtype=denom.dtype)
-
-    # Stable log-dets
-    sign_num, logdet_num = torch.slogdet(Sigma)
-    sign_den, logdet_den = torch.slogdet(denom)
-
-    # If non-PD numerically, default 0
-    if (sign_num <= 0) or (sign_den <= 0):
-        return torch.zeros((), device=Sigma.device, dtype=Sigma.dtype)
-
-    return 0.5 * (logdet_num - logdet_den)
-
-
-def ib_regularizer_A_pinv(
-    A: torch.Tensor,                 # [r, d_in]
-    Sigma: torch.Tensor,             # [d_in, d_in] (symmetric PSD)
-    jitter: float = 1e-6,            # small ridge for PD-ness
-    rcond: float = 1e-7,             # cutoff for pseudoinverse
-    use_float64: bool = False,       # improves stability for logdets
-):
-    """
-    Use pseudoinverse
-    Assumes B has full column rank (left inverse exists) and cancels
-    """
-    dtype = torch.float64 if use_float64 else Sigma.dtype
-    device = Sigma.device
-
-    # symmetrize + ridge for slogdet
-    Sigma = Sigma.to(dtype)
-    Sigma = 0.5 * (Sigma + Sigma.T)
-    d = Sigma.shape[0]
-    Sigma = Sigma + jitter * torch.eye(d, dtype=dtype, device=device)
-
-    # Core: M = A Σ A^T  (r×r), symmetrize
-    A = A.to(dtype)
-    M = A @ Sigma @ A.T
-    M = 0.5 * (M + M.T)
-
-    M_pinv = torch.linalg.pinv(M, rcond=rcond)
-
-    correction = Sigma @ (A.T @ (M_pinv @ (A @ Sigma)))
-    correction = 0.5 * (correction + correction.T)
-
-    # jitter for PD
-    denom = 0.5 * (Sigma + Sigma.T) - correction
-    denom = 0.5 * (denom + denom.T) + jitter * torch.eye(d, dtype=dtype, device=device)
-
-    sign_num, logdet_num = torch.slogdet(Sigma)
-    sign_den, logdet_den = torch.slogdet(denom)
-
-    if (sign_num <= 0) or (sign_den <= 0) or not torch.isfinite(logdet_num + logdet_den):
-        return torch.zeros((), device=device, dtype=dtype)
-
-    return 0.5 * (logdet_num - logdet_den)
-
-
-# class ib_regularizer:
-#     def __init__(self):
-#         pass
-
-#     def regularize(self, W, sigma): 
-#         """
-#         W is the LoRA matrix (AB)
-#         Sigma is the covariance matrix
-
-#         """
-#         # WΣ
-#         w_sigma = W @ sigma
-#         # calculate the term corresponding to (WΣ)W.T
-#         middle_term = w_sigma @ W.T
-#         # take the inverse ((WΣ)W.T)^-1 
-#         inv_middle = torch.linalg.inv(middle_term)  
-#         # would torch.linalg.pinv be safer to use?
-
-#         # calculate the correction term
-#         correction = sigma @ W.T @ inv_middle @ W @ sigma
-#         denominator = sigma - correction
-
-#         # take the determinants of the numerator and denominator
-#         det_numerator = torch.linalg.det(sigma)
-#         det_denominator = torch.linalg.det(denominator)
-
-#         # consider stabilizing the computation for denominator like the following
-#         # det_denominator = torch.linalg.det(denominator + 1e-6 * torch.eye(sigma.shape[0]))
-
-#         # skip unstable cases
-#         if det_numerator <= 0 or det_denominator <= 0:
-#             return torch.tensor(0.0, device=sigma.device) 
-
-#         regualrizer = 0.5 * torch.log(det_numerator / det_denominator)
-#         return regualrizer
 
 
 def _is_lora_wrapper(m) -> bool:
@@ -393,11 +220,10 @@ def ib_penalty_from_ab(model, include_scaling: bool = False):
         for key in m.lora_A.keys():
             A = m.lora_A[key].weight  # [r, d_in]
             B = m.lora_B[key].weight  # [d_out, r]
-            # reg = reg + ib_regularizer_AB(A, B, Sigma)
-            reg = ib_regularizer_A_only(A, Sigma)
+            reg = reg + ib_regularizer_AB(A, B, Sigma)
 
-            key = f"{mod_name}:{key}".replace(".", "_")
-            per_mod_reg[key] = reg
+            reg_key = f"{mod_name}:{key}".replace(".", "_")
+            per_mod_reg[reg_key] = reg
 
     return reg, per_mod_reg
 
@@ -448,7 +274,7 @@ class IBLoraTrainer(Trainer):
                 })
 
 
-        # want to maximize MI, so we want to minimize the IB regularizer
+        # want to maximize MI, so we should subtract MI from loss
         loss = task_loss - self.ib_lambda * ib_reg
         return (loss, outputs) if return_outputs else loss
 
